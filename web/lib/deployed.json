@@ -1,5 +1,7 @@
 {
   "31337": {
-    "mockUSDC": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+    "mockUSDC": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    "rentalEscrow": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
+    "treasury": "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199"
   }
 }

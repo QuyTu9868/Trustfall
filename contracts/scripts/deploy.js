@@ -7,7 +7,8 @@ const hre = require("hardhat");
 const OUTPUT_FILE = path.join(__dirname, "..", "..", "web", "lib", "deployed.json");
 
 async function main() {
-  const [deployer] = await hre.ethers.getSigners();
+  const signers = await hre.ethers.getSigners();
+  const deployer = signers[0];
   const network = await hre.ethers.provider.getNetwork();
   const chainId = Number(network.chainId);
 
@@ -23,10 +24,28 @@ async function main() {
   await (await usdc.mint(deployer.address, initialMint)).wait();
   console.log(`Minted 10000 USDC to ${deployer.address}`);
 
+  // The 1% platform fee lands here. On the local chain use the last test account,
+  // so fee income never mixes with the balances under test.
+  const treasury = process.env.TREASURY_ADDRESS || signers[signers.length - 1].address;
+  if (!hre.ethers.isAddress(treasury)) {
+    throw new Error(`TREASURY_ADDRESS is not a valid address: ${treasury}`);
+  }
+  console.log(`Treasury: ${treasury}`);
+
+  const escrow = await hre.ethers.deployContract("RentalEscrow", [usdcAddress, treasury]);
+  await escrow.waitForDeployment();
+  const escrowAddress = await escrow.getAddress();
+  console.log(`RentalEscrow: ${escrowAddress}`);
+
   const existing = fs.existsSync(OUTPUT_FILE)
     ? JSON.parse(fs.readFileSync(OUTPUT_FILE, "utf8"))
     : {};
-  existing[chainId] = { ...(existing[chainId] || {}), mockUSDC: usdcAddress };
+  existing[chainId] = {
+    ...(existing[chainId] || {}),
+    mockUSDC: usdcAddress,
+    rentalEscrow: escrowAddress,
+    treasury,
+  };
 
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
   fs.writeFileSync(OUTPUT_FILE, JSON.stringify(existing, null, 2) + "\n");

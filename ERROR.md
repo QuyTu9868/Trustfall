@@ -82,6 +82,21 @@ Bốn dòng, không dài hơn. Entry dài thì không ai đọc lại.
 Chỗ này ghi những thói lặp đi lặp lại: gộp checkpoint khi luật bắt tách, sửa triệu
 chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "xong" khi chưa test.
 
+### [2026-07-30] Cắt output bằng `tail` nên không thấy cảnh báo ở đầu
+
+- **Chuyện gì xảy ra:** Suốt checkpoint 0, mỗi lần chạy `forge test` và `hardhat compile`
+  đều xem kết quả bằng `| tail -8` hoặc `| tail -25` cho gọn. Đầu output có một dòng
+  `ERROR foundry_compilers::cache: invalid type: sequence, expected a map` bị cắt mất.
+  Tới checkpoint 1 tình cờ xem output dài hơn mới thấy, hoá ra Hardhat và Foundry đang
+  đè cache của nhau.
+- **Sai ở đâu:** Báo cáo "xanh hết" dựa trên phần cuối output. Cảnh báo và lỗi
+  không nghiêm trọng thường nằm ở **đầu** output, đúng chỗ `tail` cắt đi. Test pass mà
+  vẫn có cảnh báo là chuyện thường.
+- **Luật rút ra:** Lần chạy đầu tiên của một công cụ trong dự án thì xem **toàn bộ**
+  output, không cắt. Về sau muốn gọn thì lọc theo từ khoá (`grep -E "ERROR|error|warning|
+  Compiling|passed|failed"`) chứ đừng cắt theo vị trí. Cắt theo vị trí là cắt mù.
+- **Skill đích:** `contract-test-audit`, `vibe-code-dapp`
+
 ### [2026-07-30] Liệt kê tên file bí mật thay vì chặn cả họ
 
 - **Chuyện gì xảy ra:** `.gitignore` viết `.env`, `.env.local`, `.env*.local`. User tự
@@ -101,6 +116,20 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
 ---
 
 ## 3. Thiếu sót khi code
+
+### [2026-07-30] Để Hardhat và Foundry dùng chung thư mục cache
+
+- **Chuyện gì xảy ra:** Dựng `contracts/` cho cả hai công cụ nhưng không đặt
+  `cache_path` cho Foundry. Cả hai mặc định ghi `cache/solidity-files-cache.json` với
+  hai định dạng khác nhau, nên chạy công cụ nào là công cụ đó đè cache của công cụ kia,
+  rồi lần sau bên kia đọc không hiểu, in ERROR và biên dịch lại từ đầu.
+- **Sai ở đâu:** Dựng hai công cụ cùng thư mục mà không kiểm chúng có tranh đường dẫn
+  nào không. Kết quả không sai, nhưng chậm và in ra dòng ERROR làm tưởng có lỗi thật.
+- **Luật rút ra:** Đặt hai công cụ build vào cùng một thư mục thì đối chiếu **toàn bộ**
+  đường dẫn mặc định của chúng, không chỉ thư mục source. Với Hardhat và Foundry, ít nhất
+  phải đặt `cache_path = "cache_forge"` trong `foundry.toml`. Đường ra artifact thì
+  Foundry dùng `out/`, Hardhat dùng `artifacts/`, hai cái này không trùng.
+- **Skill đích:** `vibe-code-dapp`, `contract-test-audit`
 
 ### [2026-07-30] Bỏ sót điều kiện tiên quyết "có gas chưa"
 

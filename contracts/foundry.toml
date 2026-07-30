@@ -3,6 +3,9 @@ src = "src"
 out = "out"
 test = "test"
 libs = ["lib", "node_modules"]
+# Hardhat also writes cache/solidity-files-cache.json, in its own format. Sharing the
+# directory makes each tool trash the other's cache and recompile from scratch.
+cache_path = "cache_forge"
 solc = "0.8.24"
 # Must match hardhat.config.js, otherwise tested bytecode differs from deployed bytecode.
 evm_version = "cancun"
