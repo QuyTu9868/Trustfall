@@ -1,0 +1,6 @@
+{
+  "solc_remaps": ["@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/"],
+  "solc_args": "--evm-version cancun --optimize --optimize-runs 200",
+  "filter_paths": "node_modules",
+  "exclude_informational": true
+}

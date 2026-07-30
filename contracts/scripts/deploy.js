@@ -2,9 +2,9 @@ const fs = require("fs");
 const path = require("path");
 const hre = require("hardhat");
 
-// Writes deployed addresses to web/lib/deployed.json so the frontend never needs
+// Writes deployed addresses to frontend/lib/deployed.json so the frontend never needs
 // a hand-copied address.
-const OUTPUT_FILE = path.join(__dirname, "..", "..", "web", "lib", "deployed.json");
+const OUTPUT_FILE = path.join(__dirname, "..", "..", "frontend", "lib", "deployed.json");
 
 async function main() {
   const signers = await hre.ethers.getSigners();
@@ -27,12 +27,31 @@ async function main() {
   // The 1% platform fee lands here. On the local chain use the last test account,
   // so fee income never mixes with the balances under test.
   const treasury = process.env.TREASURY_ADDRESS || signers[signers.length - 1].address;
-  if (!hre.ethers.isAddress(treasury)) {
-    throw new Error(`TREASURY_ADDRESS is not a valid address: ${treasury}`);
+  // Only this address can apply a dispute verdict. It is the server's wallet, never
+  // the agent's: the agent proposes over HTTP, the server signs.
+  const agent = process.env.AGENT_ADDRESS || signers[signers.length - 2].address;
+  // Human fallback resolver, same three verdicts as the agent and nothing more. Must be
+  // a different key: one key holding both roles means losing it takes out both.
+  const admin = process.env.ADMIN_ADDRESS || signers[signers.length - 3].address;
+  for (const [label, value] of [
+    ["TREASURY_ADDRESS", treasury],
+    ["AGENT_ADDRESS", agent],
+    ["ADMIN_ADDRESS", admin],
+  ]) {
+    if (!hre.ethers.isAddress(value)) {
+      throw new Error(`${label} is not a valid address: ${value}`);
+    }
   }
   console.log(`Treasury: ${treasury}`);
+  console.log(`Agent:    ${agent}`);
+  console.log(`Admin:    ${admin}`);
 
-  const escrow = await hre.ethers.deployContract("RentalEscrow", [usdcAddress, treasury]);
+  const escrow = await hre.ethers.deployContract("RentalEscrow", [
+    usdcAddress,
+    treasury,
+    agent,
+    admin,
+  ]);
   await escrow.waitForDeployment();
   const escrowAddress = await escrow.getAddress();
   console.log(`RentalEscrow: ${escrowAddress}`);
@@ -45,6 +64,8 @@ async function main() {
     mockUSDC: usdcAddress,
     rentalEscrow: escrowAddress,
     treasury,
+    agent,
+    admin,
   };
 
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });

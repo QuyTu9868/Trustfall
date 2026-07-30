@@ -170,6 +170,43 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   cho chạy ngoài chain local vì nó mint tiền miễn phí.
 - **Skill đích:** `vibe-code-dapp`
 
+### [2026-07-30] Thêm một trạng thái giữ tiền mà không hỏi "làm sao ra khỏi đây"
+
+- **Chuyện gì xảy ra:** Thêm trạng thái `Disputed` vào contract escrow. Viết xong, test
+  xanh 80/80, Slither sạch, chạy thật trên chain đúng cả ba verdict. Rồi mới nhận ra:
+  nếu không ai phán quyết thì trạng thái đứng ở `Disputed` vĩnh viễn, `finalize` từ chối
+  vì sai trạng thái, và **cọc bị khoá trong contract không có đường nào lấy ra**, vì cố
+  ý không có hàm admin nào. Suýt nữa báo cáo là xong.
+  Cùng lúc đó còn một ca nữa cùng loại: `openDispute` lúc đầu cho mở lại từ `Disputed`,
+  tức là hai bên có thể liên tục đẩy hạn phán quyết ra xa mãi.
+- **Sai ở đâu:** Đã làm đúng phân tích này cho `Active` và `Returned` ở lượt trước (nên
+  mới có timeout 3 ngày), rồi thêm trạng thái mới mà **không lặp lại phân tích đó**. Test
+  và Slither không bắt được loại lỗi này: không có gì revert sai, không có gì tính sai,
+  chỉ là thiếu một đường đi. Muốn thấy nó phải ngồi liệt kê ra, công cụ không giúp.
+- **Luật rút ra:** Mỗi lần thêm một trạng thái vào máy trạng thái đang giữ tiền, trả lời
+  ba câu trước khi viết dòng đầu tiên: (1) từ trạng thái này có đường ra nào **không phụ
+  thuộc vào một bên cụ thể phải hành động**; (2) nếu mọi bên đều nằm im thì tiền đi đâu;
+  (3) có ai tự đẩy được thời hạn ra xa mãi không. Viết luôn một test cho mỗi câu.
+  Nguyên tắc gốc: tiền vào được thì phải có đường ra được, và đường ra đó không được
+  cần tới thiện chí của ai.
+- **Skill đích:** `vibe-code-dapp`, `contract-test-audit`, `agentic-engineering`
+
+### [2026-07-30] Nhân đôi logic tính mốc thời gian ở hai hàm động tới tiền
+
+- **Chuyện gì xảy ra:** `finalize` và `openDispute` đều cần cùng một mốc "hạn nhả cọc",
+  tính khác nhau tuỳ trạng thái Returned hay Active. Viết rời ra thành hai khối `if`
+  giống nhau ở hai hàm. Không ai phát hiện lúc review, chỉ tới khi Slither báo
+  `uninitialized-local` mới nhìn lại và thấy đoạn đó bị nhân đôi.
+- **Sai ở đâu:** Hai bản sao của một luật về **tiền và thời gian**. Sau này sửa cửa sổ
+  3 ngày ở một hàm mà quên hàm kia thì có ca tiền vừa được nhả vừa còn mở tranh chấp
+  được, mà test đang có sẽ không bắt vì mỗi test chỉ đi qua một hàm.
+- **Luật rút ra:** Một luật về tiền hoặc thời gian chỉ được viết ở **đúng một chỗ**, rút
+  thành hàm riêng ngay lần thứ hai cần tới nó, không đợi lần thứ ba. Đây là ngoại lệ
+  của quy tắc "thà viết thẳng ba lần": viết thẳng được với code hiển thị, không được với
+  luật chia tiền. Khi rút ra, để hàm chung trả về giá trị và để bên gọi tự chọn lỗi, như
+  vậy mỗi hàm vẫn báo lỗi đúng ngữ cảnh của nó.
+- **Skill đích:** `vibe-code-dapp`, `contract-test-audit`
+
 ### [2026-07-30] Test mang tên một giới hạn nhưng không thử đúng cái giới hạn đó chặn
 
 - **Chuyện gì xảy ra:** Thêm `MAX_RENTAL_DAYS = 30` để vòng lặp đánh dấu ngày không

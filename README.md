@@ -11,12 +11,17 @@ rewritten in Rust when Rialo opens its testnet, so they are kept deliberately th
 ## Layout
 
 ```
+frontend/         Next.js 16 + wagmi + RainbowKit. Also the backend: the API routes
+                  that hold the signing key live in frontend/app/api.
 contracts/        Solidity. Foundry runs the tests, Hardhat compiles and deploys.
-web/              Next.js 16 + wagmi + RainbowKit.
 supabase/         schema.sql for the off-chain tables.
 CLAUDE.md         Project rules. Read this first.
 UI-REFERENCE.md   Screen layouts and which Airbnb flows to copy.
+ERROR.md          Log of coding mistakes, written at each commit.
 ```
+
+There is no separate `backend/` folder. Next.js is full stack, so the server side of
+Trustfall is a set of API routes inside `frontend/`. `contracts/` holds Solidity only.
 
 ## Requirements
 
@@ -38,14 +43,14 @@ Install dependencies:
 
 ```bash
 cd contracts && npm install
-cd ../web && npm install
+cd ../frontend && npm install
 ```
 
 Copy the env templates:
 
 ```bash
 cp contracts/.env.example contracts/.env
-cp web/.env.local.example web/.env.local
+cp frontend/.env.local.example frontend/.env.local
 ```
 
 In `contracts/.env`, set `DEV_WALLETS` to your own wallet address. That is the only
@@ -59,11 +64,11 @@ Three terminals.
 # 1. local chain
 cd contracts && npm run node
 
-# 2. deploy MockUSDC, then top up the wallets in DEV_WALLETS
+# 2. deploy contracts, then top up the wallets in DEV_WALLETS
 cd contracts && npm run setup:local
 
 # 3. frontend
-cd web && npm run dev
+cd frontend && npm run dev
 ```
 
 Add Localhost 8545 to your wallet (chain id 31337) and open http://localhost:3000.

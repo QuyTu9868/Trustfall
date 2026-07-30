@@ -7,7 +7,14 @@ const hre = require("hardhat");
 // this again after each restart.
 //
 // Set DEV_WALLETS in contracts/.env to a comma separated list of addresses.
-const DEPLOYED_FILE = path.join(__dirname, "..", "..", "web", "lib", "deployed.json");
+const DEPLOYED_FILE = path.join(
+  __dirname,
+  "..",
+  "..",
+  "frontend",
+  "lib",
+  "deployed.json"
+);
 const ETH_PER_WALLET = "10";
 const USDC_PER_WALLET = 10_000n * 10n ** 6n;
 
