@@ -1,26 +1,74 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+  Trustfall design tokens.
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  Warm monochrome, flat, contrast carried by type rather than colour. Colour is a
+  scarce resource here: it appears only on status badges, where it means something.
+
+  No animation anywhere in the app. UI-REFERENCE.md section 5 rules it out because the
+  demo gets judged on whatever laptop is to hand, and light beats pretty.
+
+  Light only, no dark mode. One theme to get right instead of two, and every screenshot
+  and screen recording of the demo then looks the same.
+*/
+
+@theme {
+  /* Surfaces */
+  --color-canvas: #fbfbfa;
+  --color-surface: #ffffff;
+  --color-line: #eaeaea;
+
+  /* Type. Never pure black: charcoal reads softer at small sizes. */
+  --color-ink: #2f3437;
+  --color-ink-strong: #111111;
+  --color-ink-muted: #787774;
+
+  /* Status pastels, paired background and text. One pair per rental state. */
+  --color-pend-bg: #fbf3db;
+  --color-pend-ink: #956400;
+  --color-okay-bg: #e1f3fe;
+  --color-okay-ink: #1f6c9f;
+  --color-live-bg: #edf3ec;
+  --color-live-ink: #346538;
+  --color-stop-bg: #fdebec;
+  --color-stop-ink: #9f2f2d;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-instrument-serif);
+
+  --radius-card: 8px;
+  --radius-control: 5px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-canvas);
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Editorial serif for headings: tight tracking, tight leading. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  color: var(--color-ink-strong);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/*
+  Amounts, addresses and dates only line up in a monospace face with tabular figures.
+  Money that jitters as it updates looks broken.
+*/
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }

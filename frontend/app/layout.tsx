@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
+import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
 import { Providers } from "./providers";
 
 const geistSans = Geist({
@@ -11,6 +13,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// One weight, headings only. Carries the editorial contrast against the sans body.
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -26,10 +35,19 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full`}
+      // The Privy SDK writes scroll-behavior onto <html> when it initialises, which the
+      // server never rendered, so React reports a hydration mismatch. Suppressed on this
+      // one element only: a genuine mismatch deeper in the tree still warns, and a dev
+      // console full of noise is a console where the real warning gets missed.
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
-        <Providers>{children}</Providers>
+      <body className="flex min-h-full flex-col">
+        <Providers>
+          <SiteHeader />
+          <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">{children}</div>
+          <SiteFooter />
+        </Providers>
       </body>
     </html>
   );

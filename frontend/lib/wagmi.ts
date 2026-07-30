@@ -1,18 +1,17 @@
-import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { hardhat, sepolia } from "wagmi/chains";
+import { createConfig } from "@privy-io/wagmi";
 import { http } from "wagmi";
+import { hardhat, sepolia } from "viem/chains";
+import { localRpcUrl } from "./chain";
 
-// A real WalletConnect project id is only needed for the QR / mobile wallet option.
-// Browser wallets like MetaMask work with the placeholder, so local dev is never blocked.
-const projectId =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "trustfall-local-dev";
-
-export const config = getDefaultConfig({
-  appName: "Trustfall",
-  projectId,
+/**
+ * Privy's createConfig, not wagmi's. It takes no connectors on purpose: Privy owns the
+ * wallet list, both the embedded wallet it makes for email users and whichever browser
+ * wallet someone picks. That is also why RainbowKit is gone. One way in beats two.
+ */
+export const wagmiConfig = createConfig({
   chains: [hardhat, sepolia],
   transports: {
-    [hardhat.id]: http("http://127.0.0.1:8545"),
+    [hardhat.id]: http(localRpcUrl),
     [sepolia.id]: http(),
   },
   ssr: true,

@@ -131,6 +131,24 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   Foundry dùng `out/`, Hardhat dùng `artifacts/`, hai cái này không trùng.
 - **Skill đích:** `vibe-code-dapp`, `contract-test-audit`
 
+### [2026-07-30] Dựng xong giao diện mà chưa hề xem nó render ra sao
+
+- **Chuyện gì xảy ra:** Dựng khung frontend checkpoint 3. Typecheck sạch, `next build`
+  sạch, cả 4 route trả HTTP 200, `curl` thấy đúng chữ cần thấy. Coi như xong. Tới lúc
+  chụp ảnh trang thật mới thấy **hai lỗi cùng lúc**: (1) chỗ giữ chỗ lúc Privy chưa khởi
+  tạo là một ô rỗng có viền, trông y như ô input hỏng chứ không như trạng thái đang tải;
+  (2) nút ghi "Mint 100 USDC" nhưng lúc chưa đăng nhập thì bấm vào nó mở hộp đăng nhập,
+  không mint gì cả.
+- **Sai ở đâu:** Lấy "build sạch, test xanh, HTTP 200" làm bằng chứng giao diện đúng.
+  Bốn thứ đó chỉ chứng minh code **chạy**, không chứng minh nó **nhìn ra sao** hay
+  **nói đúng sự thật**. Không một công cụ nào trong số đó bắt được cả hai lỗi trên, và cả
+  hai đều là thứ người dùng thấy ngay giây đầu.
+- **Luật rút ra:** Việc nào có giao diện thì **chụp ảnh trang thật rồi nhìn** trước khi
+  báo cáo, không chỉ curl lấy chữ. Kèm hai câu hỏi hỏi mỗi nút và mỗi chỗ giữ chỗ:
+  "chữ trên nút có đúng việc nó sẽ làm ở trạng thái hiện tại không" và "chỗ đang tải có
+  trông như đang tải không, hay như một thứ bị hỏng".
+- **Skill đích:** `minimalist-ui`, `design-taste-frontend`, `frontend-e2e-wallet`
+
 ### [2026-07-30] Bỏ sót điều kiện tiên quyết "có gas chưa"
 
 - **Chuyện gì xảy ra:** Trang smoke test checkpoint 0 xử hai điều kiện trước khi cho
