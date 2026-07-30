@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+*.tsbuildinfo
+
+# hardhat
+artifacts/
+cache/
+typechain-types/
+
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# env
+# Ignore every env file by default, then allow the templates back in. Listing
+# specific names instead lets a file like .env.test slip through with a private
+# key in it.
+.env*
+!.env.example
+!.env*.example
+!.env.local.example
+
+# test / coverage
+coverage/
+coverage.json
+lcov.info
+test-results/
+playwright-report/
+
+# misc
+files.zip
+.DS_Store
+*.log
