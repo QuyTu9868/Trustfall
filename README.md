@@ -14,14 +14,22 @@ rewritten in Rust when Rialo opens its testnet, so they are kept deliberately th
 frontend/         Next.js 16 + wagmi + RainbowKit. Also the backend: the API routes
                   that hold the signing key live in frontend/app/api.
 contracts/        Solidity. Foundry runs the tests, Hardhat compiles and deploys.
-supabase/         schema.sql for the off-chain tables.
+services/         Setup files for third party services, nothing the app imports.
 CLAUDE.md         Project rules. Read this first.
 UI-REFERENCE.md   Screen layouts and which Airbnb flows to copy.
 ERROR.md          Log of coding mistakes, written at each commit.
 ```
 
-There is no separate `backend/` folder. Next.js is full stack, so the server side of
-Trustfall is a set of API routes inside `frontend/`. `contracts/` holds Solidity only.
+Two things worth knowing about this layout:
+
+**There is no `backend/` folder.** Next.js is full stack, so the server side of Trustfall
+is a set of API routes inside `frontend/`, including the ones that hold the signing key.
+`contracts/` holds Solidity only.
+
+**`services/` is not where integration code goes.** It holds only what you paste into a
+vendor's dashboard, such as `services/supabase/schema.sql`. Privy, Pinata and the rest are
+code, and their code lives in `frontend/` because that is its own npm package and Next.js
+cannot import from outside it. See `services/README.md`.
 
 ## Requirements
 
