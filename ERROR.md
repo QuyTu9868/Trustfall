@@ -131,6 +131,55 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   Foundry dùng `out/`, Hardhat dùng `artifacts/`, hai cái này không trùng.
 - **Skill đích:** `vibe-code-dapp`, `contract-test-audit`
 
+### [2026-07-30] Chỉ kiểm những trạng thái dễ chạm tới, bỏ qua trạng thái quan trọng
+
+- **Chuyện gì xảy ra:** Dựng form đăng tin có bước chọn ảnh. Chụp ảnh màn hình kiểm tra
+  đúng như bài học hôm trước, thấy đẹp, báo cáo xong. User dùng thật thì lòi ra hai lỗi,
+  **cả hai chỉ xuất hiện sau khi đã chọn ảnh**: ảnh xem trước bị `object-cover` cắt mất
+  gần hết chỉ còn một góc, và ô chọn file nhận bao nhiêu ảnh cũng được vì `multiple` của
+  HTML không có giới hạn số lượng.
+- **Sai ở đâu:** Chụp đúng **màn hình rỗng** rồi coi như đã kiểm cả màn hình. Trạng thái
+  rỗng là trạng thái dễ chạm tới nhất và ít thông tin nhất. Toàn bộ giá trị của màn đó
+  nằm ở trạng thái **sau khi có dữ liệu**, mà mình chưa từng nhìn thấy nó lần nào.
+- **Luật rút ra:** Liệt kê các trạng thái của màn hình trước khi kiểm: rỗng, đang tải,
+  có dữ liệu, dữ liệu tràn hoặc quá nhiều, lỗi. Kiểm trạng thái **có dữ liệu** trước tiên
+  vì nó là lý do màn hình đó tồn tại. Trạng thái nào không tự dựng được thì nói thẳng ra
+  là chưa kiểm, đừng để nó lẫn vào phần đã kiểm.
+- **Skill đích:** `minimalist-ui`, `design-taste-frontend`, `frontend-e2e-wallet`
+
+### [2026-07-30] Xây cả một đường phụ thuộc vào tính năng chưa bật ở dịch vụ ngoài
+
+- **Chuyện gì xảy ra:** Làm xác thực người đăng tin bằng identity token của Privy. Đọc
+  kỹ file type của SDK, viết client lấy token, viết server xác minh token, test lộ trình
+  từ chối (không token, token bịa) đều đúng. User bấm Publish thì token rỗng, dù đã đăng
+  nhập thành công. Nguyên nhân: identity token **mặc định tắt**, phải tự bật một công tắc
+  trong dashboard Privy. Không dòng code nào sai cả.
+- **Sai ở đâu:** Đọc API của thư viện rồi tưởng là đã hiểu tính năng. File type mô tả
+  **cách gọi**, nó không nói tính năng có cần bật ở phía dịch vụ hay không. Cái đó chỉ
+  nằm trong tài liệu hướng dẫn. Mình bỏ qua bước đọc tài liệu vì đã có type.
+- **Luật rút ra:** Trước khi xây một đường phụ thuộc vào tính năng của dịch vụ ngoài, đọc
+  trang tài liệu của **chính tính năng đó**, không chỉ file type, và trả lời: nó có cần
+  bật ở dashboard không, có cần khoá riêng không, có mặc định tắt không. Nếu cần bật thì
+  **nói user bật trước**, rồi mới viết code. Kiểm sớm bằng một lời gọi thật, đừng để cả
+  luồng xong mới phát hiện.
+- **Skill đích:** `dapp-discovery`, `vibe-code-dapp`, `latch-agent-gateway`
+
+### [2026-07-30] Thông báo lỗi mô tả triệu chứng và bảo user làm việc vô ích
+
+- **Chuyện gì xảy ra:** Khi thiếu identity token, màn hình hiện "Still preparing your
+  session. Try again in a moment." User bấm lại, vẫn hỏng. Bấm lại nữa, vẫn hỏng. Câu đó
+  hứa rằng **chờ sẽ được**, trong khi chờ bao lâu cũng không bao giờ được, vì vấn đề nằm
+  ở một công tắc chưa bật.
+- **Sai ở đâu:** Viết thông báo theo thứ mình quan sát được ở trong code ("biến này đang
+  rỗng") chứ không theo thứ user cần làm. Tệ hơn cả im lặng: im lặng thì user đi tìm
+  nguyên nhân, còn câu này giữ chân họ trong một vòng lặp chắc chắn thất bại.
+- **Luật rút ra:** Mỗi thông báo lỗi phải trả lời được **"giờ tôi phải làm gì"**. Không
+  viết "đang chuẩn bị", "thử lại sau" trừ khi biết chắc là chờ thật sự có tác dụng. Khi
+  chưa chắc nguyên nhân, nói ra cả hai khả năng kèm cách kiểm, còn hơn đoán một cái rồi
+  hướng user đi sai. Đọc lại từng câu báo lỗi và hỏi: câu này làm user hành động đúng hay
+  làm họ mất thời gian.
+- **Skill đích:** `minimalist-ui`, `design-taste-frontend`, `vibe-code-dapp`
+
 ### [2026-07-30] Dựng xong giao diện mà chưa hề xem nó render ra sao
 
 - **Chuyện gì xảy ra:** Dựng khung frontend checkpoint 3. Typecheck sạch, `next build`
@@ -273,6 +322,9 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
   là nó thành sai, mà chỉ thị sai còn tệ hơn không có chỉ thị. Chỗ đúng của nó là mục 9
   "Bẫy đã biết" trong `CLAUDE.md` của dự án, **kèm ngày**, để người đọc biết phải kiểm
   lại.
+- **Đường dẫn bấm trong dashboard của dịch vụ ngoài.** Cùng lý do: nhà cung cấp đổi bố
+  cục là chữ trong này thành sai đường. Ghi cái luật ("phải kiểm tính năng có cần bật
+  không"), đừng ghi cái đường đi.
 - **Lỗi cú pháp, lỗi gõ sai.** Sửa rồi đi tiếp, không lặp lại nên không cần ghi.
 - **Lỗi chỉ xảy ra một lần** do môi trường lạ.
 
