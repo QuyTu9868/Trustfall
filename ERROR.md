@@ -170,6 +170,21 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   cho chạy ngoài chain local vì nó mint tiền miễn phí.
 - **Skill đích:** `vibe-code-dapp`
 
+### [2026-07-30] Test mang tên một giới hạn nhưng không thử đúng cái giới hạn đó chặn
+
+- **Chuyện gì xảy ra:** Thêm `MAX_RENTAL_DAYS = 30` để vòng lặp đánh dấu ngày không
+  hết gas. Viết `test_AcceptsExactlyMaxDays` nhưng test đó chỉ gọi `requestRental` rồi
+  assert trạng thái. Mà `requestRental` không chạy vòng lặp nào, `approveRental` mới
+  chạy. Tức là test mang tên giới hạn gas nhưng chưa hề chạm tới đoạn tốn gas.
+- **Sai ở đâu:** Test đúng cái tên hàm gần nhất thay vì đúng **rủi ro** mà giới hạn đó
+  sinh ra để chặn. Nếu trần bị nâng lên 500 ngày, test cũ vẫn xanh trong khi
+  `approveRental` đã hết gas.
+- **Luật rút ra:** Đặt một giới hạn nào thì test phải chạy đúng thao tác mà giới hạn đó
+  bảo vệ, ở đúng giá trị biên, và **đo thật** con số đáng lo. Ở đây là đo gas của
+  `approveRental` với 30 ngày rồi assert nó dưới ngưỡng, chứ không chỉ assert trạng thái.
+  Hỏi trước khi viết test: "nếu bỏ giới hạn này đi, test của mình có đỏ không?"
+- **Skill đích:** `contract-test-audit`
+
 ### [2026-07-30] Quên đặt target ES2020 khi dựng Next cho dApp
 
 - **Chuyện gì xảy ra:** `create-next-app` để `target: "ES2017"` trong `tsconfig.json`.
