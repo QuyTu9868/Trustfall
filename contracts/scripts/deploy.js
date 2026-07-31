@@ -71,6 +71,19 @@ async function main() {
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
   fs.writeFileSync(OUTPUT_FILE, JSON.stringify(existing, null, 2) + "\n");
   console.log(`Wrote ${OUTPUT_FILE}`);
+
+  // The ABI goes with it. Copying function signatures into the frontend by hand is how
+  // the two drift apart: the contract changes, the copy does not, and the mismatch only
+  // shows up as a failed transaction with no useful message.
+  for (const [name, file] of [
+    ["RentalEscrow", "escrow-abi.json"],
+    ["MockUSDC", "usdc-abi.json"],
+  ]) {
+    const target = path.join(path.dirname(OUTPUT_FILE), file);
+    const { abi } = await hre.artifacts.readArtifact(name);
+    fs.writeFileSync(target, JSON.stringify(abi, null, 2) + "\n");
+    console.log(`Wrote ${target}`);
+  }
 }
 
 main().catch((error) => {

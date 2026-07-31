@@ -71,6 +71,8 @@ export default async function ListingPage(props: {
         </div>
 
         <BookingBox
+          listingId={listing.id}
+          owner={listing.owner_address}
           pricePerDay={Number(listing.price_per_day)}
           deposit={Number(listing.deposit)}
           initialStart={from}

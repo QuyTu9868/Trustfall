@@ -131,6 +131,52 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   Foundry dùng `out/`, Hardhat dùng `artifacts/`, hai cái này không trùng.
 - **Skill đích:** `vibe-code-dapp`, `contract-test-audit`
 
+### [2026-07-31] Quên rằng chain local giữ nguyên đồng hồ đã bị tua tới
+
+- **Chuyện gì xảy ra:** Test luồng thuê, permit liên tục bị từ chối với
+  `ERC20InsufficientAllowance` dù chữ ký dựng đúng. Nguyên nhân: mấy script trước đó đã
+  `evm_increaseTime` nhiều ngày để thử timeout, và **chain giữ nguyên phần tua đó**. Hạn
+  của permit tính từ `Date.now()` hoá ra nằm ở quá khứ so với `block.timestamp`, nên
+  permit hết hạn ngay khi vừa ký.
+- **Sai ở đâu:** Coi đồng hồ chain local là đồng hồ thật. Nó chỉ đúng cho tới lần tua đầu
+  tiên, và sau đó **không bao giờ tự quay lại**. Lỗi lại hiện ra ở tận chỗ khác
+  (allowance), nên mất một lúc mới lần được về nguyên nhân.
+- **Luật rút ra:** Tua thời gian trên chain local là thao tác **một chiều**. Đã tua để
+  test timeout thì **khởi động lại node** trước khi test bất cứ thứ gì có hạn tính từ giờ
+  thật: permit, chữ ký QR, phiên đăng nhập. Khi gặp lỗi hết hạn khó hiểu, việc đầu tiên
+  là so `block.timestamp` với `Date.now()`.
+- **Skill đích:** `vibe-code-dapp`, `frontend-e2e-wallet`, `contract-test-audit`
+
+### [2026-07-31] Phá đúng cái luật mình đã viết thành chú thích trong chính file đó
+
+- **Chuyện gì xảy ra:** Thêm `requestRentalWithPermit`. Viết lời gọi `permit` lên đầu hàm
+  vì đọc xuôi: "xin phép trước, rồi làm". Slither báo `reentrancy-benign` và
+  `reentrancy-events`. Soi lại thì đúng: `permit` là **lời gọi ra ngoài**, mà mình đặt nó
+  **trước** toàn bộ phần ghi state. Trong khi checks-effects-interactions là luật mình đã
+  ghi rõ thành chú thích ở ngay file đó từ checkpoint 1.
+- **Sai ở đâu:** Sắp xếp code theo thứ tự **kể chuyện cho dễ hiểu** thay vì theo thứ tự
+  **an toàn**. Ở đây không khai thác được vì token là USDC không gọi ngược, nhưng lý do
+  đó là may mắn về hoàn cảnh, không phải do mình cẩn thận.
+- **Luật rút ra:** Trước khi commit một hàm mới trong contract, đọc lại nó một lượt và
+  gạch chân **mọi lời gọi ra ngoài**, rồi kiểm chúng có nằm sau toàn bộ phần ghi state
+  không. Có sẵn luật trong đầu không đủ, phải rà lại từng hàm mới, vì hàm mới là chỗ luật
+  cũ dễ bị quên nhất.
+- **Skill đích:** `vibe-code-dapp`, `contract-test-audit`
+
+### [2026-07-31] Sửa code chứa ký tự escape bằng script lồng trong shell
+
+- **Chuyện gì xảy ra:** Dùng heredoc shell chạy Python để chèn một khối test Solidity có
+  chuỗi `"\x19\x01"`. Escape bị xử lý hai lần, nên file nhận **hai ký tự điều khiển thật**
+  thay vì chuỗi escape. Compiler báo "Invalid character in string", và nhìn bằng mắt
+  thường trong editor thì đoạn đó **trông vẫn bình thường**.
+- **Sai ở đâu:** Chọn công cụ sai cho loại nội dung. Heredoc lồng script là ba tầng xử lý
+  chuỗi chồng nhau, mà nội dung lại chính là chuỗi có escape.
+- **Luật rút ra:** Nội dung có escape, ký tự đặc biệt, hay dấu ngoặc lồng nhau thì sửa
+  bằng công cụ sửa file trực tiếp, đừng đẩy qua shell. Nếu buộc phải sinh bằng script thì
+  dùng dạng không cần escape, như `hex"1901"` của Solidity. Và khi lỗi kiểu này xảy ra,
+  soi bằng `cat -A` để thấy ký tự vô hình, vì đọc thường sẽ không thấy gì sai.
+- **Skill đích:** `vibe-code-dapp`
+
 ### [2026-07-31] Code một đơn vị tính tiền mà chưa bao giờ hỏi nó nghĩa là gì
 
 - **Chuyện gì xảy ra:** `CLAUDE.md` ghi "đơn vị thuê: theo ngày". Mình code luôn thành

@@ -1299,6 +1299,110 @@ contract RentalEscrowTest is Test {
         vm.stopPrank();
     }
 
+    // Permit ------------------------------------------------------------------
+
+    /// @dev Builds the EIP-2612 signature MockUSDC expects for an approval.
+    function _signPermit(uint256 key, address holder, uint256 amount, uint256 deadline)
+        internal
+        view
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                keccak256(
+                    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+                ),
+                holder,
+                address(escrow),
+                amount,
+                usdc.nonces(holder),
+                deadline
+            )
+        );
+        bytes32 digest =
+            keccak256(abi.encodePacked(hex"1901", usdc.DOMAIN_SEPARATOR(), structHash));
+        return vm.sign(key, digest);
+    }
+
+    function test_PermitApprovesAndRequestsInOneSignature() public {
+        // A renter who has never approved the escrow. Two calls would mean two wallet
+        // popups, and the first one is the worst place to lose somebody.
+        (address fresh, uint256 freshKey) = makeAddrAndKey("freshRenter");
+        usdc.mint(fresh, FUNDS);
+        assertEq(usdc.allowance(fresh, address(escrow)), 0, "starts with no allowance");
+
+        uint256 amount = RENT + DEPOSIT;
+        uint256 deadline = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(freshKey, fresh, amount, deadline);
+
+        vm.prank(fresh);
+        uint256 id = escrow.requestRentalWithPermit(
+            LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, END, deadline, v, r, s
+        );
+
+        assertEq(uint256(_statusOf(id)), uint256(RentalEscrow.Status.Requested));
+        assertEq(usdc.balanceOf(address(escrow)), amount, "escrow funded");
+        assertEq(usdc.balanceOf(fresh), FUNDS - amount, "renter paid in");
+    }
+
+    /// @dev Anyone watching the mempool can lift the permit out and submit it alone. The
+    ///      request must still go through rather than reverting on a spent permit.
+    function test_RequestStillWorksIfSomebodyFrontRunsThePermit() public {
+        (address fresh, uint256 freshKey) = makeAddrAndKey("frontRunVictim");
+        usdc.mint(fresh, FUNDS);
+
+        uint256 amount = RENT + DEPOSIT;
+        uint256 deadline = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(freshKey, fresh, amount, deadline);
+
+        // The griefer submits the permit first, from their own address.
+        vm.prank(stranger);
+        usdc.permit(fresh, address(escrow), amount, deadline, v, r, s);
+        assertEq(usdc.allowance(fresh, address(escrow)), amount, "allowance already set");
+
+        // The real request still lands: the spent permit is caught and ignored.
+        vm.prank(fresh);
+        uint256 id = escrow.requestRentalWithPermit(
+            LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, END, deadline, v, r, s
+        );
+        assertEq(uint256(_statusOf(id)), uint256(RentalEscrow.Status.Requested));
+        assertEq(usdc.balanceOf(address(escrow)), amount, "escrow funded anyway");
+    }
+
+    function test_PermitForTooLittleStillFailsAtTheTransfer() public {
+        // The permit only covers the deposit, so the transfer of rent plus deposit has
+        // nothing to fall back on. Better to fail than to half fund an escrow.
+        (address fresh, uint256 freshKey) = makeAddrAndKey("underPermit");
+        usdc.mint(fresh, FUNDS);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(freshKey, fresh, DEPOSIT, deadline);
+
+        vm.prank(fresh);
+        vm.expectRevert(); // ERC20InsufficientAllowance
+        escrow.requestRentalWithPermit(
+            LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, END, deadline, v, r, s
+        );
+    }
+
+    function test_ExpiredPermitStillFailsAtTheTransfer() public {
+        (address fresh, uint256 freshKey) = makeAddrAndKey("latePermit");
+        usdc.mint(fresh, FUNDS);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signPermit(freshKey, fresh, RENT + DEPOSIT, deadline);
+
+        vm.warp(deadline + 1);
+        vm.prank(fresh);
+        // The permit is swallowed, so the missing allowance is what stops it. The money
+        // is never at risk either way, which is the point of ignoring the permit failure.
+        vm.expectRevert();
+        escrow.requestRentalWithPermit(
+            LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, END, deadline, v, r, s
+        );
+    }
+
     // Ids ---------------------------------------------------------------------
 
     function test_IdsIncrement() public {

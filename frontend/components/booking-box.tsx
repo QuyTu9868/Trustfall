@@ -1,6 +1,15 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { parseUnits } from "viem";
+import { usePrivy } from "@privy-io/react-auth";
+import {
+  USDC_DECIMALS,
+  isoDateToTimestamp,
+  listingIdToBytes32,
+} from "@/lib/escrow";
+import { useRequestRental } from "@/lib/use-request-rental";
 
 const MAX_RENTAL_DAYS = 30; // mirrors RentalEscrow.MAX_RENTAL_DAYS
 const FEE_BPS = 100; // mirrors RentalEscrow.FEE_BPS, 1%
@@ -33,16 +42,23 @@ function nextDay(value: string) {
  * charge on top would overstate the price by 1% and be a lie about the contract.
  */
 export function BookingBox({
+  listingId,
+  owner,
   pricePerDay,
   deposit,
   initialStart = "",
   initialEnd = "",
 }: {
+  listingId: string;
+  owner: string;
   pricePerDay: number;
   deposit: number;
   initialStart?: string;
   initialEnd?: string;
 }) {
+  const router = useRouter();
+  const { authenticated, login, user } = usePrivy();
+  const { request, step, error, busy } = useRequestRental();
   // Seeded from ?from= and ?to= so a set of dates can be linked to. Checkpoint 6 needs
   // that to send somebody a specific booking, and it also makes this panel, the one
   // screen where the money is spelled out, something that can be checked from a URL
@@ -64,6 +80,45 @@ export function BookingBox({
   const maxRent = days && days > 0 ? pricePerDay * days : 0;
   const fee = (maxRent * FEE_BPS) / 10_000;
   const payNow = maxRent + deposit;
+
+  const ownsIt =
+    authenticated &&
+    user?.wallet?.address?.toLowerCase() === owner.toLowerCase();
+  const canSubmit = Boolean(start && end && days && days > 0 && !tooLong && !ownsIt);
+
+  const label = !authenticated
+    ? "Sign in to rent"
+    : ownsIt
+      ? "This is your own listing"
+      : step === "signing"
+        ? "Approve in your wallet..."
+        : step === "sending"
+          ? "Confirm the request..."
+          : step === "confirming"
+            ? "Waiting for the chain..."
+            : "Request to rent";
+
+  async function submit() {
+    if (!authenticated) {
+      login();
+      return;
+    }
+    if (!days || days < 1) return;
+
+    const id = await request({
+      listingId: listingIdToBytes32(listingId),
+      owner: owner as `0x${string}`,
+      pricePerDay: parseUnits(String(pricePerDay), USDC_DECIMALS),
+      deposit: parseUnits(String(deposit), USDC_DECIMALS),
+      startDate: isoDateToTimestamp(start),
+      endDate: isoDateToTimestamp(end),
+      total: parseUnits(String(pricePerDay * days + deposit), USDC_DECIMALS),
+    });
+
+    // Straight to the rentals page: the request now exists on chain and the next move
+    // belongs to the owner, so there is nothing more to do on this screen.
+    if (id !== null) router.push("/rentals");
+  }
 
   return (
     <aside className="sticky top-20 flex flex-col gap-4 rounded-card border border-line bg-surface p-5">
@@ -139,17 +194,19 @@ export function BookingBox({
         </dl>
       )}
 
-      {/* Says what it is rather than pretending to work. The escrow call arrives in
-          checkpoint 6, and a button that silently does nothing is worse than an honest
-          disabled one. */}
       <button
-        disabled
-        className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white disabled:opacity-40"
+        onClick={submit}
+        disabled={busy || !canSubmit}
+        className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white active:scale-[0.98] disabled:opacity-40"
       >
-        Request to rent
+        {label}
       </button>
+
+      {error && <p className="text-xs text-stop-ink">{error}</p>}
+
       <p className="text-xs text-ink-muted">
-        Renting goes on chain in checkpoint 6. Nothing is charged yet.
+        One signature approves the USDC and sends the request together. The owner has to
+        accept before anything is charged, and you can cancel until they do.
       </p>
     </aside>
   );

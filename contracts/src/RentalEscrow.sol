@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
@@ -41,6 +42,16 @@ contract RentalEscrow is EIP712 {
         RefundRenter,
         Split,
         PayOwner
+    }
+
+    /// @dev An optional EIP-2612 approval carried alongside a request. `present` is
+    ///      false for the plain entry point, which keeps one code path for both.
+    struct Permit {
+        bool present;
+        uint256 deadline;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
     }
 
     struct Rental {
@@ -206,6 +217,58 @@ contract RentalEscrow is EIP712 {
         uint64 startDate,
         uint64 endDate
     ) external returns (uint256 id) {
+        // Spelled out rather than left to default so the absence is deliberate on the
+        // page, not something a reader has to infer from what is missing.
+        Permit memory none = Permit({present: false, deadline: 0, v: 0, r: 0, s: 0});
+        return
+            _createRental(listingId, owner, pricePerDay, deposit, startDate, endDate, none);
+    }
+
+    /**
+     * @notice The same request, but approving the USDC in the same signature.
+     *
+     * @dev Without this a renter signs twice: once to approve the token, once to request.
+     *      CLAUDE.md section 9 is blunt that every extra wallet popup is a chance for
+     *      somebody to give up, and the first popup is the worst place to lose them.
+     *
+     *      The permit is wrapped in try/catch on purpose. Anyone watching the mempool can
+     *      copy the permit out of this transaction and submit it alone, which would make
+     *      the allowance already set and this call revert on a replayed permit. Ignoring
+     *      that failure costs nothing: if the allowance really is missing, the transfer
+     *      below reverts anyway.
+     */
+    function requestRentalWithPermit(
+        bytes32 listingId,
+        address owner,
+        uint256 pricePerDay,
+        uint256 deposit,
+        uint64 startDate,
+        uint64 endDate,
+        uint256 permitDeadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 id) {
+        return _createRental(
+            listingId,
+            owner,
+            pricePerDay,
+            deposit,
+            startDate,
+            endDate,
+            Permit({present: true, deadline: permitDeadline, v: v, r: r, s: s})
+        );
+    }
+
+    function _createRental(
+        bytes32 listingId,
+        address owner,
+        uint256 pricePerDay,
+        uint256 deposit,
+        uint64 startDate,
+        uint64 endDate,
+        Permit memory permit_
+    ) private returns (uint256 id) {
         if (owner == address(0)) revert ZeroAddress();
         if (owner == msg.sender) revert CannotRentOwnItem();
         if (pricePerDay == 0) revert ZeroRent();
@@ -246,7 +309,16 @@ contract RentalEscrow is EIP712 {
             id, listingId, owner, msg.sender, pricePerDay, rent, deposit, startDate, endDate
         );
 
-        usdc.safeTransferFrom(msg.sender, address(this), rent + deposit);
+        // Interactions last, after every state change above, so nothing this contract
+        // owns can be observed half written from outside. The permit is a call into the
+        // token, so it belongs down here with the transfer rather than at the top.
+        uint256 amount = rent + deposit;
+        if (permit_.present) {
+            try IERC20Permit(address(usdc)).permit(
+                msg.sender, address(this), amount, permit_.deadline, permit_.v, permit_.r, permit_.s
+            ) {} catch {}
+        }
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /// @notice Owner accepts the request. This is the moment the price is agreed and
@@ -457,7 +529,7 @@ contract RentalEscrow is EIP712 {
 
     /// @notice Nights in a range, for the frontend to price a rental before requesting.
     /// @dev The end date is the day the item comes back, so it is not itself charged.
-    function dayCount(uint64 startDate, uint64 endDate) external pure returns (uint256) {
+    function dayCount(uint64 startDate, uint64 endDate) public pure returns (uint256) {
         (uint256 startDay, uint256 endDay) = _dayRange(startDate, endDate);
         if (endDay <= startDay) revert InvalidDates();
         return endDay - startDay;
