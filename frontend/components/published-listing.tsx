@@ -67,7 +67,7 @@ export function PublishedListing({
                 key={image.url}
                 src={image.url}
                 alt={`${listing.title}, photo ${index + 1}`}
-                lazy
+                sizes="(max-width: 640px) 100vw, 20rem"
               />
             ))}
           </div>

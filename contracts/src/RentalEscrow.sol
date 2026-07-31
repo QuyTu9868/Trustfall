@@ -47,14 +47,20 @@ contract RentalEscrow is EIP712 {
         bytes32 listingId; // uuid of the Supabase listing row
         address owner;
         address renter;
-        uint256 rent;
+        uint256 pricePerDay;
+        uint256 rent; // pricePerDay * booked days, the most the renter can be charged
         uint256 deposit;
         uint64 startDate;
         uint64 endDate;
+        uint64 checkedInAt; // set at check-in, starts the 24 hour clock
         uint64 returnedAt; // set at check-out, starts the dispute window
         uint64 disputedAt; // set when a dispute opens, starts the verdict window
         Status status;
     }
+
+    /// @notice A rental day is a full 24 hours from the moment the renter checks in, not
+    ///         a calendar square. Collect at 3pm and a day runs to 3pm tomorrow.
+    uint64 public constant RENTAL_DAY = 24 hours;
 
     /// @notice Platform fee in basis points, taken from rent only. 100 bps = 1%.
     uint256 public constant FEE_BPS = 100;
@@ -72,8 +78,8 @@ contract RentalEscrow is EIP712 {
     ///         would lock the money up forever, since there is no way to withdraw.
     uint64 public constant VERDICT_WINDOW = 7 days;
 
-    /// @notice Approving marks every day of the range as booked, one storage write per
-    ///         day, so the range has to be bounded or the loop runs out of gas.
+    /// @notice Longest rental, counted in nights. Approving writes one storage slot per
+    ///         night, so the range has to be bounded or the loop runs out of gas.
     uint256 public constant MAX_RENTAL_DAYS = 30;
 
     bytes32 private constant CHECK_IN_TYPEHASH =
@@ -109,14 +115,23 @@ contract RentalEscrow is EIP712 {
         bytes32 indexed listingId,
         address indexed owner,
         address renter,
-        uint256 rent,
+        uint256 pricePerDay,
+        uint256 rent, // the allowance: price per day times the days booked
         uint256 deposit,
         uint64 startDate,
         uint64 endDate
     );
     event RentalApproved(uint256 indexed id);
-    event CheckedIn(uint256 indexed id, uint256 ownerPayout, uint256 fee);
+    event CheckedIn(uint256 indexed id, uint64 checkedInAt);
     event CheckedOut(uint256 indexed id, uint64 returnedAt);
+    /// @dev How the escrowed rent was split once the 24 hour clock stopped.
+    event RentSettled(
+        uint256 indexed id,
+        uint256 charged,
+        uint256 toOwner,
+        uint256 fee,
+        uint256 refundedToRenter
+    );
     event RentalCompleted(uint256 indexed id, uint256 depositReturned);
     event RentalCancelled(
         uint256 indexed id, address indexed by, uint256 refundedToRenter, uint256 paidToOwner
@@ -180,45 +195,55 @@ contract RentalEscrow is EIP712 {
     ///      with requests and then cancel for a full refund.
     /// @param listingId uuid of the Supabase listing, for matching rows off chain
     /// @param owner Wallet that owns the item, taken from the listing
-    /// @param rent Total rent for the whole period, in USDC
+    /// @param pricePerDay Cost of one 24 hour day, in USDC. The contract multiplies.
     /// @param deposit Refundable deposit, in USDC
     /// @return id The new rental id, also emitted for Supabase to mirror
     function requestRental(
         bytes32 listingId,
         address owner,
-        uint256 rent,
+        uint256 pricePerDay,
         uint256 deposit,
         uint64 startDate,
         uint64 endDate
     ) external returns (uint256 id) {
         if (owner == address(0)) revert ZeroAddress();
         if (owner == msg.sender) revert CannotRentOwnItem();
-        if (rent == 0) revert ZeroRent();
-        if (endDate < startDate) revert InvalidDates();
+        if (pricePerDay == 0) revert ZeroRent();
         // A rental that already ended would have its deposit release deadline in the
         // past, which would skip the dispute window entirely.
         if (endDate < block.timestamp) revert RentalAlreadyOver();
 
         (uint256 startDay, uint256 endDay) = _dayRange(startDate, endDate);
-        uint256 numDays = endDay - startDay + 1;
+        // The booked range still runs in nights, because that is the unit the calendar
+        // blocks in. What it buys is an allowance: the most days this rental can be
+        // charged for. What is actually charged is settled from the clock at check-out.
+        if (endDay <= startDay) revert InvalidDates();
+        uint256 numDays = endDay - startDay;
         if (numDays > MAX_RENTAL_DAYS) revert RentalTooLong(numDays, MAX_RENTAL_DAYS);
+
+        // The contract multiplies rather than accepting a total from the caller. A total
+        // that disagreed with the day rate would charge one number while the screen
+        // showed another, and there would be no way to tell which was wrong.
+        uint256 rent = pricePerDay * numDays;
 
         id = nextRentalId++;
         rentals[id] = Rental({
             listingId: listingId,
             owner: owner,
             renter: msg.sender,
+            pricePerDay: pricePerDay,
             rent: rent,
             deposit: deposit,
             startDate: startDate,
             endDate: endDate,
+            checkedInAt: 0,
             returnedAt: 0,
             disputedAt: 0,
             status: Status.Requested
         });
 
         emit RentalRequested(
-            id, listingId, owner, msg.sender, rent, deposit, startDate, endDate
+            id, listingId, owner, msg.sender, pricePerDay, rent, deposit, startDate, endDate
         );
 
         usdc.safeTransferFrom(msg.sender, address(this), rent + deposit);
@@ -248,16 +273,13 @@ contract RentalEscrow is EIP712 {
         if (msg.sender != rental.renter) revert NotRenter();
         _requireSignature(CHECK_IN_TYPEHASH, id, deadline, signature, rental.owner);
 
-        uint256 fee = (rental.rent * FEE_BPS) / BPS_DENOMINATOR;
-        // Subtract rather than recompute, so no rounding dust is left stuck here.
-        uint256 ownerPayout = rental.rent - fee;
-        address owner = rental.owner;
-
+        // Nothing is paid out here, unlike before. A rental day is 24 hours from this
+        // moment, so how much the renter owes is not known until the item comes back.
+        // The rent stays in escrow and is settled on the way out of Active.
+        uint64 now_ = uint64(block.timestamp);
+        rental.checkedInAt = now_;
         rental.status = Status.Active;
-        emit CheckedIn(id, ownerPayout, fee);
-
-        usdc.safeTransfer(owner, ownerPayout);
-        if (fee > 0) usdc.safeTransfer(treasury, fee);
+        emit CheckedIn(id, now_);
     }
 
     /// @notice Owner confirms the item came back, which starts the dispute window.
@@ -272,6 +294,9 @@ contract RentalEscrow is EIP712 {
         rental.returnedAt = now_;
         rental.status = Status.Returned;
         emit CheckedOut(id, now_);
+
+        // The clock stops here, so this is where the rent is finally worked out.
+        _settleRent(id, rental, now_);
     }
 
     /// @notice Invalidate every QR code already shown for this rental.
@@ -351,6 +376,11 @@ contract RentalEscrow is EIP712 {
         rental.disputedAt = now_;
         rental.status = Status.Disputed;
         emit DisputeOpened(id, msg.sender, now_);
+
+        // Coming from Active the rent has not been worked out yet, and the verdict only
+        // ever touches the deposit. Settle it now so a dispute cannot leave the rent
+        // stranded. From Returned it was already settled at check-out.
+        if (status == Status.Active) _settleRent(id, rental, now_);
     }
 
     /// @notice Agent, or the human fallback, applies one of three verdicts.
@@ -404,9 +434,10 @@ contract RentalEscrow is EIP712 {
     ///      someone else had the chance to act and did not take it.
     function finalize(uint256 id) external {
         Rental storage rental = rentals[id];
+        Status wasStatus = rental.status;
 
         (uint64 releaseAt, bool timed) = _releaseDeadline(rental);
-        if (!timed) revert NotFinalizable(rental.status);
+        if (!timed) revert NotFinalizable(wasStatus);
         if (block.timestamp < releaseAt) revert TooEarly(releaseAt);
 
         uint256 deposit = rental.deposit;
@@ -415,14 +446,21 @@ contract RentalEscrow is EIP712 {
         rental.status = Status.Completed;
         emit RentalCompleted(id, deposit);
 
+        // Straight from Active means the owner never confirmed the return, so the rent is
+        // still sitting here. Settling from now is always past the booked range, so the
+        // cap in _rentOwed charges the full booking, which is right: the renter kept the
+        // item and nobody said otherwise.
+        if (wasStatus == Status.Active) _settleRent(id, rental, uint64(block.timestamp));
+
         if (deposit > 0) usdc.safeTransfer(renter, deposit);
     }
 
-    /// @notice Number of days in a range, for the frontend to show before requesting.
+    /// @notice Nights in a range, for the frontend to price a rental before requesting.
+    /// @dev The end date is the day the item comes back, so it is not itself charged.
     function dayCount(uint64 startDate, uint64 endDate) external pure returns (uint256) {
-        if (endDate < startDate) revert InvalidDates();
         (uint256 startDay, uint256 endDay) = _dayRange(startDate, endDate);
-        return endDay - startDay + 1;
+        if (endDay <= startDay) revert InvalidDates();
+        return endDay - startDay;
     }
 
     /// @dev Loads a rental and asserts its current status. An id that does not exist
@@ -431,6 +469,63 @@ contract RentalEscrow is EIP712 {
         Rental storage rental = rentals[id];
         if (rental.status != expected) revert WrongStatus(expected, rental.status);
         return rental;
+    }
+
+    /**
+     * @dev Works out what the rental actually cost and pays everyone out.
+     *
+     *      Called on every way out of Active, and only from there, so the rent is settled
+     *      exactly once. Leaving Active by check-out settles from the return time; by
+     *      dispute, from the moment the complaint was raised; by timeout, from now, which
+     *      is past the booked range and so lands on the full booked amount anyway. No
+     *      special cases: the cap does that work.
+     */
+    function _settleRent(uint256 id, Rental storage rental, uint64 endedAt) private {
+        uint256 owed = _rentOwed(rental, endedAt);
+        uint256 fee = (owed * FEE_BPS) / BPS_DENOMINATOR;
+        // Subtract rather than recompute, so no rounding dust is left stuck here.
+        uint256 ownerPayout = owed - fee;
+        uint256 refund = rental.rent - owed;
+
+        address owner = rental.owner;
+        address renter = rental.renter;
+
+        emit RentSettled(id, owed, ownerPayout, fee, refund);
+
+        if (ownerPayout > 0) usdc.safeTransfer(owner, ownerPayout);
+        if (fee > 0) usdc.safeTransfer(treasury, fee);
+        // Whatever the renter booked but did not use goes straight back.
+        if (refund > 0) usdc.safeTransfer(renter, refund);
+    }
+
+    /**
+     * @dev Days owed, counted in whole 24 hour blocks from check-in.
+     *
+     *      Any started day is a whole day, which is how vehicle hire works everywhere:
+     *      keep it 25 hours and that is two days. Never less than one, so a renter cannot
+     *      collect an item and hand it straight back for free. Never more than the days
+     *      booked, because the contract only holds that much and cannot reach into the
+     *      renter's wallet for more. Keeping the item longer than booked is what the
+     *      deposit and the dispute flow are for.
+     */
+    function _rentOwed(Rental storage rental, uint64 endedAt) private view returns (uint256) {
+        uint64 startedAt = rental.checkedInAt;
+        uint256 elapsed = endedAt > startedAt ? endedAt - startedAt : 0;
+
+        // Up to and including 24 hours is one day. Past that, round up. Written this way
+        // round so there is no separate "what if it is zero" case to get wrong.
+        //
+        // Slither flags the division before the multiply below as precision loss. Here
+        // the precision loss is the whole point: rental days are whole days, and 25 hours
+        // has to become 2 rather than 2.08. Multiplying first would price by the second.
+        uint256 daysUsed =
+            elapsed <= RENTAL_DAY ? 1 : (elapsed + RENTAL_DAY - 1) / RENTAL_DAY;
+
+        (uint256 startDay, uint256 endDay) = _dayRange(rental.startDate, rental.endDate);
+        uint256 booked = endDay - startDay;
+        if (daysUsed > booked) daysUsed = booked;
+
+        return rental.pricePerDay * daysUsed;
     }
 
     /// @dev The one clock that both the timeout and the dispute window read from.
@@ -485,7 +580,9 @@ contract RentalEscrow is EIP712 {
         private
     {
         (uint256 startDay, uint256 endDay) = _dayRange(startDate, endDate);
-        for (uint256 day = startDay; day <= endDay; day++) {
+        // Stops before the end day: that is the day the item comes back, so somebody else
+        // can start their rental on it.
+        for (uint256 day = startDay; day < endDay; day++) {
             uint256 takenBy = bookedDay[listingId][day];
             if (takenBy != 0) revert DayNotAvailable(day, takenBy);
             bookedDay[listingId][day] = id;
@@ -496,7 +593,8 @@ contract RentalEscrow is EIP712 {
         private
     {
         (uint256 startDay, uint256 endDay) = _dayRange(startDate, endDate);
-        for (uint256 day = startDay; day <= endDay; day++) {
+        // Same range as _bookDays, or cancelling would leave a day locked forever.
+        for (uint256 day = startDay; day < endDay; day++) {
             // Only clear days this rental actually holds, never someone else's.
             if (bookedDay[listingId][day] == id) delete bookedDay[listingId][day];
         }

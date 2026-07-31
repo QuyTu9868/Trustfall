@@ -14,7 +14,8 @@ import {
   validateDraft,
   validateImages,
 } from "@/lib/listing";
-import { Photo } from "@/components/photo";
+import { LocalPhoto } from "@/components/photo";
+import { PriceHint } from "@/components/price-hint";
 import { PublishedListing } from "@/components/published-listing";
 
 /**
@@ -195,6 +196,7 @@ export default function ListPage() {
                 value={draft.pricePerDay}
                 onChange={(v) => set("pricePerDay", v)}
               />
+              <PriceHint category={draft.category} />
             </Field>
             <Field
               label="Deposit"
@@ -228,7 +230,7 @@ export default function ListPage() {
           {previews.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
               {previews.map((url, index) => (
-                <Photo key={url} src={url} alt={`Photo ${index + 1}`} />
+                <LocalPhoto key={url} src={url} alt={`Photo ${index + 1}`} />
               ))}
             </div>
           )}
@@ -265,7 +267,7 @@ export default function ListPage() {
               <p className="text-sm whitespace-pre-wrap">{draft.description}</p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 {previews.map((url, index) => (
-                  <Photo key={url} src={url} alt={`Photo ${index + 1}`} />
+                  <LocalPhoto key={url} src={url} alt={`Photo ${index + 1}`} />
                 ))}
               </div>
             </div>

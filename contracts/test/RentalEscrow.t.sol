@@ -32,13 +32,15 @@ contract RentalEscrowTest is Test {
 
     bytes32 constant LISTING_ID = keccak256("listing-uuid");
     bytes32 constant OTHER_LISTING = keccak256("other-listing");
-    uint256 constant RENT = 100e6; // 100 USDC
+    uint256 constant PRICE_PER_DAY = 50e6; // 50 USDC a day
     uint256 constant DEPOSIT = 20e6; // 20 USDC
-    uint256 constant FUNDS = 1_000e6;
+    uint256 constant FUNDS = 5_000e6;
 
-    // A 3 day rental: day numbers 20833, 20834, 20835.
+    // START to END books two nights, so the escrow holds two days of rent as the most
+    // this rental can cost. What is actually charged depends on the clock.
     uint64 constant START = 1_800_000_000;
     uint64 constant END = START + 2 days;
+    uint256 constant RENT = PRICE_PER_DAY * 2;
 
     function setUp() public {
         // Move the clock to just before the rental starts, so END is in the future.
@@ -124,21 +126,26 @@ contract RentalEscrowTest is Test {
         returns (uint256 id)
     {
         vm.prank(who);
-        id = escrow.requestRental(listing, owner, RENT, DEPOSIT, start, end);
+        id = escrow.requestRental(listing, owner, PRICE_PER_DAY, DEPOSIT, start, end);
     }
 
     function _statusOf(uint256 id) internal view returns (RentalEscrow.Status) {
-        (,,,,,,,,, RentalEscrow.Status status) = escrow.rentals(id);
+        (,,,,,,,,,,, RentalEscrow.Status status) = escrow.rentals(id);
         return status;
     }
 
     function _returnedAtOf(uint256 id) internal view returns (uint64) {
-        (,,,,,,, uint64 returnedAt,,) = escrow.rentals(id);
+        (,,,,,,,,, uint64 returnedAt,,) = escrow.rentals(id);
         return returnedAt;
     }
 
+    function _checkedInAtOf(uint256 id) internal view returns (uint64) {
+        (,,,,,,,, uint64 checkedInAt,,,) = escrow.rentals(id);
+        return checkedInAt;
+    }
+
     function _disputedAtOf(uint256 id) internal view returns (uint64) {
-        (,,,,,,,, uint64 disputedAt,) = escrow.rentals(id);
+        (,,,,,,,,,, uint64 disputedAt,) = escrow.rentals(id);
         return disputedAt;
     }
 
@@ -169,6 +176,10 @@ contract RentalEscrowTest is Test {
 
     function _reachReturned() internal returns (uint256 id) {
         id = _reachActive();
+        // Hold it for the whole booking, so settlement charges the full amount and the
+        // balances in these tests are about the deposit rather than a rent refund.
+        // The partial use cases get their own tests further down.
+        vm.warp(block.timestamp + 2 days);
         _checkOut(id);
     }
 
@@ -209,22 +220,26 @@ contract RentalEscrowTest is Test {
         assertEq(usdc.balanceOf(address(escrow)), RENT + DEPOSIT, "still both in escrow");
         assertEq(usdc.balanceOf(owner), 0, "approve does not pay the owner");
 
-        // 3. Check in with the owner's signed QR: rent goes out, deposit stays.
+        // 3. Check in with the owner's signed QR. Nothing is paid out: the 24 hour clock
+        //    has only just started, so nobody yet knows what this rental will cost.
         _checkIn(id);
         assertEq(uint256(_statusOf(id)), uint256(RentalEscrow.Status.Active));
+        assertEq(_checkedInAtOf(id), uint64(block.timestamp), "clock started");
+        assertEq(usdc.balanceOf(owner), 0, "check-in pays nobody now");
+        assertEq(usdc.balanceOf(treasury), 0, "no fee yet either");
+        assertEq(usdc.balanceOf(address(escrow)), RENT + DEPOSIT, "rent still escrowed");
+
+        // 4. Check out with the renter's signed QR, after using the full two days. The
+        //    clock stops, the rent is worked out, and the deposit stays for the window.
+        vm.warp(block.timestamp + 2 days);
+        _checkOut(id);
+        assertEq(uint256(_statusOf(id)), uint256(RentalEscrow.Status.Returned));
         assertEq(usdc.balanceOf(owner), ownerPayout, "owner got rent minus fee");
         assertEq(usdc.balanceOf(treasury), fee, "treasury got the fee");
         assertEq(usdc.balanceOf(address(escrow)), DEPOSIT, "only deposit left");
 
-        // 4. Check out with the renter's signed QR: no money moves, window starts.
-        vm.warp(END);
-        _checkOut(id);
-        assertEq(uint256(_statusOf(id)), uint256(RentalEscrow.Status.Returned));
-        assertEq(_returnedAtOf(id), END, "returnedAt recorded");
-        assertEq(usdc.balanceOf(address(escrow)), DEPOSIT, "deposit still held");
-
         // 5. Finalize once the window passed: deposit back, escrow empty.
-        _warpToRelease(END);
+        _warpToRelease(_returnedAtOf(id));
         escrow.finalize(id);
         assertEq(uint256(_statusOf(id)), uint256(RentalEscrow.Status.Completed));
         assertEq(usdc.balanceOf(address(escrow)), 0, "escrow empty");
@@ -235,8 +250,8 @@ contract RentalEscrowTest is Test {
     }
 
     function test_FeeIsOnePercent() public {
-        uint256 id = _reachApproved();
-        _checkIn(id);
+        // Two days at 50 USDC, used in full, so 100 USDC of rent is settled.
+        _reachReturned();
 
         assertEq(usdc.balanceOf(owner), 99e6, "owner keeps 99 of 100");
         assertEq(usdc.balanceOf(treasury), 1e6, "treasury takes 1 of 100");
@@ -263,17 +278,99 @@ contract RentalEscrowTest is Test {
         assertEq(usdc.balanceOf(renter), FUNDS - RENT, "deposit went to the renter");
     }
 
+    // The 24 hour clock ------------------------------------------------------
+
+    /// @dev Runs a rental, holds the item for `heldFor`, and reports what was charged.
+    function _chargeAfterHolding(uint256 heldFor) internal returns (uint256 charged) {
+        uint256 id = _reachActive();
+        vm.warp(block.timestamp + heldFor);
+        _checkOut(id);
+        return usdc.balanceOf(owner) + usdc.balanceOf(treasury);
+    }
+
+    function test_ChargesOneDayForAnythingUnderTwentyFourHours() public {
+        // Handed back after an hour. Still a day: an item taken off the shelf and
+        // returned is not free, which is how every hire desk in the world works.
+        assertEq(_chargeAfterHolding(1 hours), PRICE_PER_DAY, "one day minimum");
+    }
+
+    function test_ExactlyTwentyFourHoursIsOneDay() public {
+        assertEq(_chargeAfterHolding(24 hours), PRICE_PER_DAY, "24h on the nose is one");
+    }
+
+    function test_OneSecondPastTwentyFourHoursIsTwoDays() public {
+        // The boundary that decides the price, so it gets its own test.
+        assertEq(
+            _chargeAfterHolding(24 hours + 1), PRICE_PER_DAY * 2, "started day is a day"
+        );
+    }
+
+    function test_ChargeIsCappedAtTheDaysBooked() public {
+        // Booked two days, kept it five. The contract only holds two days of rent and
+        // cannot reach into the renter's wallet for the rest, so it charges two. Getting
+        // paid for the overstay is what the deposit and the dispute flow are for.
+        assertEq(_chargeAfterHolding(5 days), RENT, "never more than was booked");
+    }
+
+    function test_UnusedDaysComeBackToTheRenter() public {
+        uint256 id = _reachActive();
+        uint256 afterPaying = usdc.balanceOf(renter);
+
+        vm.warp(block.timestamp + 2 hours);
+        _checkOut(id);
+
+        // Paid for two days up front, used one, so one day comes straight back.
+        assertEq(
+            usdc.balanceOf(renter) - afterPaying, PRICE_PER_DAY, "one day refunded"
+        );
+        assertEq(usdc.balanceOf(address(escrow)), DEPOSIT, "only the deposit is left");
+    }
+
+    function test_OwnerWhoNeverChecksOutIsPaidTheFullBooking() public {
+        uint256 id = _reachActive();
+
+        // Nobody confirms the return. Once the timeout passes, anyone can close it: the
+        // renter had the item the whole time, so the full booking is charged, and the
+        // deposit still goes back because nobody complained.
+        _warpToRelease(END);
+        vm.prank(stranger);
+        escrow.finalize(id);
+
+        assertEq(usdc.balanceOf(owner) + usdc.balanceOf(treasury), RENT, "full booking");
+        assertEq(usdc.balanceOf(renter), FUNDS - RENT, "deposit back, rent paid");
+        assertEq(usdc.balanceOf(address(escrow)), 0, "escrow empty");
+    }
+
+    function test_DisputeFromActiveSettlesTheRentToo() public {
+        uint256 id = _reachActive();
+        vm.warp(block.timestamp + 1 hours);
+
+        vm.prank(owner);
+        escrow.openDispute(id);
+
+        // The verdict only ever moves the deposit, so the rent has to be settled on the
+        // way in or it would be stranded in the contract for good.
+        assertEq(
+            usdc.balanceOf(owner) + usdc.balanceOf(treasury), PRICE_PER_DAY, "one day"
+        );
+        assertEq(usdc.balanceOf(address(escrow)), DEPOSIT, "only the deposit is disputed");
+    }
+
     function test_NoDustLeftOnOddRent() public {
-        // 101.000001 USDC does not divide by 100 cleanly.
-        uint256 oddRent = 101e6 + 1;
+        // A day rate that does not divide by 100 cleanly, so the 1% fee has a remainder.
+        uint256 oddRate = 101e6 + 1;
         vm.prank(renter);
-        uint256 id = escrow.requestRental(LISTING_ID, owner, oddRent, DEPOSIT, START, END);
+        uint256 id =
+            escrow.requestRental(LISTING_ID, owner, oddRate, DEPOSIT, START, END);
         vm.prank(owner);
         escrow.approveRental(id);
         _checkIn(id);
+        vm.warp(block.timestamp + 2 days);
+        _checkOut(id);
 
+        uint256 charged = oddRate * 2;
         assertEq(
-            usdc.balanceOf(owner) + usdc.balanceOf(treasury), oddRent, "no rent stuck"
+            usdc.balanceOf(owner) + usdc.balanceOf(treasury), charged, "no rent stuck"
         );
         assertEq(usdc.balanceOf(address(escrow)), DEPOSIT, "escrow holds exactly deposit");
     }
@@ -657,11 +754,12 @@ contract RentalEscrowTest is Test {
     function test_ApproveMarksEveryDay() public {
         uint256 id = _reachApproved();
 
-        for (uint256 day = _day(START); day <= _day(END); day++) {
-            assertEq(escrow.bookedDay(LISTING_ID, day), id, "day booked by this rental");
+        for (uint256 day = _day(START); day < _day(END); day++) {
+            assertEq(escrow.bookedDay(LISTING_ID, day), id, "night booked by this rental");
         }
         assertEq(escrow.bookedDay(LISTING_ID, _day(START) - 1), 0, "day before is free");
-        assertEq(escrow.bookedDay(LISTING_ID, _day(END) + 1), 0, "day after is free");
+        // The return day belongs to nobody, which is what lets the next renter start on it.
+        assertEq(escrow.bookedDay(LISTING_ID, _day(END)), 0, "return day is free");
     }
 
     function test_RequestDoesNotTouchCalendar() public {
@@ -682,25 +780,33 @@ contract RentalEscrowTest is Test {
     }
 
     function test_CannotApprovePartialOverlap() public {
-        _reachApproved(); // holds days START..END
-        uint256 second = _requestAs(renter2, LISTING_ID, END, END + 2 days);
+        // Holds the nights of START and START + 1. END is the return day and stays free.
+        _reachApproved();
+
+        // Starts on the last night the first rental holds, then runs past it.
+        uint256 second = _requestAs(renter2, LISTING_ID, END - 1 days, END + 2 days);
 
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(RentalEscrow.DayNotAvailable.selector, _day(END), 1)
+            abi.encodeWithSelector(RentalEscrow.DayNotAvailable.selector, _day(END) - 1, 1)
         );
         escrow.approveRental(second);
     }
 
-    function test_AdjacentDaysAreNotOverlap() public {
+    /// @dev The handover day is shared: one rental ends on it, the next begins on it,
+    ///      exactly as a hotel room changes guests on a single date.
+    function test_NextRenterMayStartOnTheReturnDay() public {
         _reachApproved();
-        uint256 second = _requestAs(renter2, LISTING_ID, END + 1 days, END + 2 days);
+        uint256 second = _requestAs(renter2, LISTING_ID, END, END + 2 days);
 
         vm.prank(owner);
         escrow.approveRental(second);
 
         assertEq(uint256(_statusOf(second)), uint256(RentalEscrow.Status.Approved));
-        assertEq(escrow.bookedDay(LISTING_ID, _day(END) + 1), second, "next day is theirs");
+        assertEq(escrow.bookedDay(LISTING_ID, _day(END)), second, "return day is theirs");
+        assertEq(
+            escrow.bookedDay(LISTING_ID, _day(END) - 1), 1, "the night before is still ours"
+        );
     }
 
     function test_SameDatesOnDifferentListingsAreFine() public {
@@ -738,7 +844,7 @@ contract RentalEscrowTest is Test {
     }
 
     function test_AcceptsExactlyMaxDays() public {
-        uint64 end = START + (uint64(escrow.MAX_RENTAL_DAYS()) - 1) * 1 days;
+        uint64 end = START + uint64(escrow.MAX_RENTAL_DAYS()) * 1 days;
         uint256 id = _requestAs(renter, LISTING_ID, START, end);
 
         assertEq(escrow.dayCount(START, end), escrow.MAX_RENTAL_DAYS());
@@ -755,13 +861,13 @@ contract RentalEscrowTest is Test {
         assertLt(gasUsed, 1_000_000, "a max length approve must stay well under a block");
         emit log_named_uint("gas to approve a 30 day rental", gasUsed);
 
-        for (uint256 day = _day(START); day <= _day(end); day++) {
-            assertEq(escrow.bookedDay(LISTING_ID, day), id, "day booked");
+        for (uint256 day = _day(START); day < _day(end); day++) {
+            assertEq(escrow.bookedDay(LISTING_ID, day), id, "night booked");
         }
     }
 
     function test_RejectsRentalLongerThanMax() public {
-        uint64 end = START + uint64(escrow.MAX_RENTAL_DAYS()) * 1 days;
+        uint64 end = START + (uint64(escrow.MAX_RENTAL_DAYS()) + 1) * 1 days;
 
         vm.prank(renter);
         vm.expectRevert(
@@ -771,7 +877,7 @@ contract RentalEscrowTest is Test {
                 escrow.MAX_RENTAL_DAYS()
             )
         );
-        escrow.requestRental(LISTING_ID, owner, RENT, DEPOSIT, START, end);
+        escrow.requestRental(LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, end);
     }
 
     function test_RejectsRentalAlreadyOver() public {
@@ -779,11 +885,22 @@ contract RentalEscrowTest is Test {
 
         vm.prank(renter);
         vm.expectRevert(RentalEscrow.RentalAlreadyOver.selector);
-        escrow.requestRental(LISTING_ID, owner, RENT, DEPOSIT, START, END);
+        escrow.requestRental(LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, END);
     }
 
-    function test_SingleDayRentalCountsAsOne() public view {
-        assertEq(escrow.dayCount(START, START), 1);
+    function test_ShortestRentalIsOneNight() public view {
+        assertEq(escrow.dayCount(START, START + 1 days), 1);
+    }
+
+    /// @dev Collecting and returning on the same date is zero nights, so there is nothing
+    ///      to charge for and nothing to book.
+    function test_RejectsSameDayStartAndEnd() public {
+        vm.expectRevert(RentalEscrow.InvalidDates.selector);
+        escrow.dayCount(START, START);
+
+        vm.prank(renter);
+        vm.expectRevert(RentalEscrow.InvalidDates.selector);
+        escrow.requestRental(LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, START);
     }
 
     // Cancel ------------------------------------------------------------------
@@ -839,8 +956,8 @@ contract RentalEscrowTest is Test {
         vm.prank(renter);
         escrow.cancel(first);
 
-        for (uint256 day = _day(START); day <= _day(END); day++) {
-            assertEq(escrow.bookedDay(LISTING_ID, day), 0, "day freed");
+        for (uint256 day = _day(START); day < _day(END); day++) {
+            assertEq(escrow.bookedDay(LISTING_ID, day), 0, "night freed");
         }
 
         uint256 second = _requestAs(renter2, LISTING_ID, START, END);
@@ -1131,19 +1248,19 @@ contract RentalEscrowTest is Test {
     function test_RejectsEndBeforeStart() public {
         vm.prank(renter);
         vm.expectRevert(RentalEscrow.InvalidDates.selector);
-        escrow.requestRental(LISTING_ID, owner, RENT, DEPOSIT, END, START);
+        escrow.requestRental(LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, END, START);
     }
 
     function test_RejectsZeroOwner() public {
         vm.prank(renter);
         vm.expectRevert(RentalEscrow.ZeroAddress.selector);
-        escrow.requestRental(LISTING_ID, address(0), RENT, DEPOSIT, START, END);
+        escrow.requestRental(LISTING_ID, address(0), PRICE_PER_DAY, DEPOSIT, START, END);
     }
 
     function test_RejectsRentingOwnItem() public {
         vm.prank(renter);
         vm.expectRevert(RentalEscrow.CannotRentOwnItem.selector);
-        escrow.requestRental(LISTING_ID, renter, RENT, DEPOSIT, START, END);
+        escrow.requestRental(LISTING_ID, renter, PRICE_PER_DAY, DEPOSIT, START, END);
     }
 
     function test_ConstructorRejectsZeroAddresses() public {
@@ -1168,7 +1285,7 @@ contract RentalEscrowTest is Test {
 
         vm.prank(broke);
         vm.expectRevert(); // ERC20InsufficientAllowance from OpenZeppelin
-        escrow.requestRental(LISTING_ID, owner, RENT, DEPOSIT, START, END);
+        escrow.requestRental(LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, END);
     }
 
     function test_RevertsWithoutEnoughBalance() public {
@@ -1178,7 +1295,7 @@ contract RentalEscrowTest is Test {
         usdc.approve(address(escrow), type(uint256).max);
 
         vm.expectRevert(); // ERC20InsufficientBalance from OpenZeppelin
-        escrow.requestRental(LISTING_ID, owner, RENT, DEPOSIT, START, END);
+        escrow.requestRental(LISTING_ID, owner, PRICE_PER_DAY, DEPOSIT, START, END);
         vm.stopPrank();
     }
 
@@ -1197,16 +1314,19 @@ contract RentalEscrowTest is Test {
 
     /// @dev Every unit the renter paid in rent has to land somewhere. Nothing may be
     ///      created and nothing may be left stranded in the escrow.
-    function testFuzz_RentSplitLosesNothing(uint256 rent, uint256 deposit) public {
-        rent = bound(rent, 1, 1e15);
+    function testFuzz_RentSplitLosesNothing(uint256 rate, uint256 deposit) public {
+        rate = bound(rate, 1, 1e15);
         deposit = bound(deposit, 0, 1e15);
+        uint256 rent = rate * 2; // two nights booked
         usdc.mint(renter, rent + deposit);
 
         vm.prank(renter);
-        uint256 id = escrow.requestRental(LISTING_ID, owner, rent, deposit, START, END);
+        uint256 id = escrow.requestRental(LISTING_ID, owner, rate, deposit, START, END);
         vm.prank(owner);
         escrow.approveRental(id);
         _checkIn(id);
+        vm.warp(block.timestamp + 2 days);
+        _checkOut(id);
 
         assertEq(
             usdc.balanceOf(owner) + usdc.balanceOf(treasury), rent, "rent conserved"
@@ -1214,15 +1334,46 @@ contract RentalEscrowTest is Test {
         assertEq(usdc.balanceOf(address(escrow)), deposit, "only deposit remains");
     }
 
+    /// @dev Whatever the renter booked but did not use has to come back, exactly, for any
+    ///      day rate and any number of days actually used.
+    function testFuzz_UnusedDaysAreRefunded(uint256 rate, uint8 hoursHeld) public {
+        rate = bound(rate, 1, 1e15);
+        uint256 held = bound(hoursHeld, 0, 47); // inside the two booked days
+        uint256 rent = rate * 2;
+        usdc.mint(renter, rent + DEPOSIT);
+        uint256 before = usdc.balanceOf(renter);
+
+        vm.prank(renter);
+        uint256 id = escrow.requestRental(LISTING_ID, owner, rate, DEPOSIT, START, END);
+        vm.prank(owner);
+        escrow.approveRental(id);
+        _checkIn(id);
+        vm.warp(block.timestamp + held * 1 hours);
+        _checkOut(id);
+
+        // Under 24 hours is one day, over is two. Never zero, never more than booked.
+        uint256 expectedDays = held <= 24 ? 1 : 2;
+        uint256 charged = rate * expectedDays;
+
+        assertEq(
+            usdc.balanceOf(owner) + usdc.balanceOf(treasury), charged, "charged the days used"
+        );
+        assertEq(
+            usdc.balanceOf(renter), before - charged - DEPOSIT, "unused days refunded"
+        );
+        assertEq(usdc.balanceOf(address(escrow)), DEPOSIT, "only the deposit is left");
+    }
+
     /// @dev The renter must never get back more than they put in, and the owner must
     ///      never receive more than the penalty.
-    function testFuzz_CancelPenaltyLosesNothing(uint256 rent) public {
-        rent = bound(rent, 1, 1e15);
+    function testFuzz_CancelPenaltyLosesNothing(uint256 rate) public {
+        rate = bound(rate, 1, 1e15);
+        uint256 rent = rate * 2; // two nights booked
         usdc.mint(renter, rent + DEPOSIT);
         uint256 paidIn = usdc.balanceOf(renter);
 
         vm.prank(renter);
-        uint256 id = escrow.requestRental(LISTING_ID, owner, rent, DEPOSIT, START, END);
+        uint256 id = escrow.requestRental(LISTING_ID, owner, rate, DEPOSIT, START, END);
         vm.prank(owner);
         escrow.approveRental(id);
         vm.prank(renter);
@@ -1242,7 +1393,7 @@ contract RentalEscrowTest is Test {
         usdc.mint(renter, RENT + deposit);
 
         vm.prank(renter);
-        uint256 id = escrow.requestRental(LISTING_ID, owner, RENT, deposit, START, END);
+        uint256 id = escrow.requestRental(LISTING_ID, owner, PRICE_PER_DAY, deposit, START, END);
         vm.prank(owner);
         escrow.approveRental(id);
         _checkIn(id);
@@ -1274,19 +1425,19 @@ contract RentalEscrowTest is Test {
 
     /// @dev Booking is inclusive of both ends, for any length inside the cap.
     function testFuzz_DayCountMatchesBookedDays(uint16 extraDays) public {
-        uint256 span = bound(extraDays, 0, escrow.MAX_RENTAL_DAYS() - 1);
+        uint256 span = bound(extraDays, 1, escrow.MAX_RENTAL_DAYS());
         uint64 end = START + uint64(span) * 1 days;
 
-        assertEq(escrow.dayCount(START, end), span + 1, "count is inclusive");
+        assertEq(escrow.dayCount(START, end), span, "nights, so the end day is not counted");
 
         uint256 id = _requestAs(renter, LISTING_ID, START, end);
         vm.prank(owner);
         escrow.approveRental(id);
 
-        for (uint256 day = _day(START); day <= _day(end); day++) {
+        for (uint256 day = _day(START); day < _day(end); day++) {
             assertEq(escrow.bookedDay(LISTING_ID, day), id, "inside the range is booked");
         }
-        assertEq(escrow.bookedDay(LISTING_ID, _day(end) + 1), 0, "past the end is free");
+        assertEq(escrow.bookedDay(LISTING_ID, _day(end)), 0, "the return day is free");
     }
 
     /// @dev A signature is only good for the exact nonce it was made with.

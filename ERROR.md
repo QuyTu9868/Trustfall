@@ -131,6 +131,39 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   Foundry dùng `out/`, Hardhat dùng `artifacts/`, hai cái này không trùng.
 - **Skill đích:** `vibe-code-dapp`, `contract-test-audit`
 
+### [2026-07-31] Code một đơn vị tính tiền mà chưa bao giờ hỏi nó nghĩa là gì
+
+- **Chuyện gì xảy ra:** `CLAUDE.md` ghi "đơn vị thuê: theo ngày". Mình code luôn thành
+  ngày lịch tính cả hai đầu (30 và 31 ra 2 ngày), viết test, chạy Slither, deploy. User
+  bắt được: thu thừa một ngày. Sửa thành đếm theo đêm. User bắt tiếp: vẫn không đúng, một
+  ngày phải là 24 tiếng kể từ lúc nhận đồ. Phải sửa contract **hai lần** cho cùng một
+  dòng spec, lần sau nặng hơn lần trước.
+- **Sai ở đâu:** "Theo ngày" nghe như đã đủ rõ nên mình không hỏi lại. Nhưng nó có ít
+  nhất ba nghĩa khác nhau, mỗi nghĩa ra một số tiền khác nhau: ngày lịch tính cả hai đầu,
+  số đêm, và số chu kỳ 24 tiếng. Chọn sai thì mọi thứ dựng lên trên nó đều sai theo, và
+  càng dựng cao thì sửa càng đắt.
+- **Luật rút ra:** Trước khi code bất kỳ **đơn vị tính tiền** nào, hỏi user nó nghĩa là
+  gì bằng một ví dụ số cụ thể: "chọn 30 và 31 thì tính mấy ngày, trả bao nhiêu". Một câu
+  hỏi có con số trong đó lộ ra ngay bất đồng, còn hỏi trừu tượng thì hai bên cùng gật rồi
+  hiểu khác nhau. Áp cho mọi thứ đo đếm được: ngày, giờ, phần trăm, làm tròn, ai trả phí.
+- **Skill đích:** `dapp-discovery`, `vibe-code-dapp`, `code-change-workflow`
+
+### [2026-07-30] Viết spec về đường đi của tiền dựa vào trí nhớ thay vì đọc lại contract
+
+- **Chuyện gì xảy ra:** Viết spec cho trang chi tiết, mô tả bảng chi phí là "tiền thuê +
+  tiền cọc + **phí nền tảng 1%** = tổng phải trả". User duyệt spec đó. Tới lúc code, đọc
+  lại `RentalEscrow` thì thấy sai: `requestRental` chỉ kéo `rent + deposit` từ renter,
+  còn 1% phí **trừ vào phần owner nhận** lúc check-in. Renter không trả thêm đồng nào.
+  Làm đúng spec thì giao diện sẽ báo giá cao hơn thực tế 1%.
+- **Sai ở đâu:** Chính mình viết cái contract đó vài ngày trước, nên tin vào trí nhớ.
+  Trí nhớ giữ được "có phí 1%" nhưng đánh rơi mất "phí trừ của ai". Với một dự án mà lý
+  do tồn tại là minh bạch tiền, nói sai con số là hỏng đúng thứ đang bán.
+- **Luật rút ra:** Mọi câu nói về **ai trả bao nhiêu cho ai** phải đọc lại đúng dòng code
+  quyết định việc đó, kể cả code mình vừa viết. Trong spec, ghi kèm tên hàm chỗ lấy số
+  (`requestRental` kéo `rent + deposit`) để người duyệt kiểm được, thay vì bắt họ tin.
+  Test số tiền phải đối chiếu với contract, không đối chiếu với spec.
+- **Skill đích:** `vibe-code-dapp`, `dapp-discovery`
+
 ### [2026-07-30] Chỉ kiểm những trạng thái dễ chạm tới, bỏ qua trạng thái quan trọng
 
 - **Chuyện gì xảy ra:** Dựng form đăng tin có bước chọn ảnh. Chụp ảnh màn hình kiểm tra
