@@ -380,6 +380,67 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   `tsconfig.tsbuildinfo`, cache incremental giữ kết quả cũ và làm tưởng sửa không hiệu lực.
 - **Skill đích:** `vibe-code-dapp`
 
+### [2026-08-01] Đổi nơi giữ sự thật ở tầng code mà không quét lại tầng schema
+
+- **Chuyện gì xảy ra:** Checkpoint 0 dựng bảng `rentals` trong Supabase làm bản sao của
+  contract, `reviews` và `messages` khoá ngoại vào nó. Checkpoint 6 chốt đơn thuê chỉ đọc
+  thẳng từ chain, không sao chép nữa. Không ai viết vào `rentals` nữa, nên khoá ngoại trỏ
+  vào hàng vĩnh viễn không tồn tại. Tới checkpoint 7 viết API review mới lộ ra.
+- **Sai ở đâu:** Coi quyết định "đọc từ chain" là quyết định của một file, trong khi nó
+  là quyết định về **nguồn sự thật**. Mọi thứ từng trỏ vào nguồn cũ đều hỏng theo, kể cả
+  thứ nằm ngoài repo như schema database.
+- **Luật rút ra:** Khi đổi chỗ giữ sự thật của một thực thể, liệt kê ngay mọi nơi đang
+  tham chiếu tới nó - bảng, khoá ngoại, cache, seed - rồi sửa hết trong cùng lượt. Đặc
+  biệt schema, vì nó không được typecheck và không nằm trong build nên hỏng lặng lẽ.
+- **Skill đích:** `vibe-code-dapp`
+
+### [2026-08-01] Viết một assert luôn đúng rồi tính nó là một test đã qua
+
+- **Chuyện gì xảy ra:** Trong script e2e có dòng `check("không còn tiền kẹt trong
+  escrow", true)`. Nó in PASS ở mọi lần chạy vì điều kiện là hằng số `true`, không đo gì
+  cả. Đếm vào tổng "19/19 xanh" như một test thật.
+- **Sai ở đâu:** Lúc viết thì chưa biết lấy số dư nền ở đâu nên để tạm `true` định quay
+  lại, rồi nhìn hàng PASS mà tưởng đã xong. Một test không thể đỏ thì tệ hơn không có
+  test, vì nó tạo cảm giác đã kiểm.
+- **Luật rút ra:** Mỗi assert phải trả lời được "giá trị nào làm dòng này đỏ". Không trả
+  lời được thì xoá. Không bao giờ để hằng số trong vị trí điều kiện, kể cả tạm.
+- **Skill đích:** `contract-test-audit`
+
+### [2026-08-01] Test bằng khoá riêng nên không chạm tới hành vi của ví thật
+
+- **Chuyện gì xảy ra:** Script e2e ký bằng private key qua viem, chạy trọn vòng 22/22
+  xanh. User bấm thử bằng MetaMask thì `checkOut` chết ngay ở tầng node vì gas limit.
+  Viem ước lượng gas rồi dùng đúng con số đó, còn ví thật khi không tin ước lượng thì lấy
+  trần theo phần trăm block gas limit, ra con số lớn gấp trăm lần và vượt giới hạn của node.
+- **Sai ở đâu:** Coi "ký được bằng viem" là bằng chứng "ký được bằng ví". Hai bên khác
+  nhau ở chỗ đắt nhất: cách chọn gas, cách xử lý ước lượng thất bại, cách nhớ nonce.
+- **Luật rút ra:** E2E ký bằng khoá riêng chỉ chứng minh contract đúng, không chứng minh
+  luồng ví đúng. Còn phải chạy một vòng bằng ví thật, hoặc dựng cấu hình chain local sao
+  cho mọi trần mà ví có thể chọn đều nằm trong ngưỡng node chấp nhận.
+- **Skill đích:** `frontend-e2e-wallet`
+
+### [2026-08-01] Chạy script bằng tsx rồi tưởng như vậy là đã kiểm kiểu
+
+- **Chuyện gì xảy ra:** Chạy `tsc --noEmit` sạch, sau đó viết thêm một hàm, chỉ chạy lại
+  bằng `tsx` thấy in ra PASS nên đi tiếp. Lỗi kiểu trong hàm mới nằm im tới lúc
+  `next build` mới nổ.
+- **Sai ở đâu:** `tsx` bóc kiểu đi rồi chạy, nó không kiểm kiểu bao giờ. Script chạy
+  thành công là bằng chứng về runtime, không phải bằng chứng về kiểu.
+- **Luật rút ra:** Viết thêm code sau lần typecheck cuối thì phải typecheck lại trước khi
+  báo xong. Việc chạy được không thay thế được việc biên dịch được.
+- **Skill đích:** `vibe-code-dapp`
+
+### [2026-08-01] Dùng control gốc của trình duyệt trong app một ngôn ngữ
+
+- **Chuyện gì xảy ra:** Ô chọn ảnh dùng `<input type="file">` trần. Trên trình duyệt để
+  tiếng Việt, nó tự vẽ nút và chữ "Chọn tệp 2 tệp" giữa một trang toàn tiếng Anh.
+- **Sai ở đâu:** Tưởng phần chữ đó do mình kiểm soát. Chữ trong `input file`, `input
+  date`, và nút của `<video>` do trình duyệt sinh theo ngôn ngữ máy, không có thuộc tính
+  HTML nào đổi được.
+- **Luật rút ra:** App chốt một ngôn ngữ thì không để lộ control gốc có chữ. Ẩn input đi,
+  bọc trong `<label>` và tự vẽ nút, vì bấm label vẫn mở được hộp thoại chọn file.
+- **Skill đích:** `minimalist-ui`
+
 Ba loại user đã nêu cho mục này:
 
 - **Thiếu component:** dựng màn hình mà bỏ sót phần bắt buộc (skeleton lúc chờ, trạng

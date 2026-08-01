@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "clean:testdata": "tsx scripts/clean-test-data.ts",
+    "e2e:cycle": "tsx scripts/cp7-cycle.ts"
   },
   "dependencies": {
     "@privy-io/react-auth": "^3.36.0",

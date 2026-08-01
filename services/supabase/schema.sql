@@ -58,39 +58,28 @@ create table listing_images (
 
 create index listing_images_listing_idx on listing_images (listing_id, sort_order);
 
--- 4. Rentals ----------------------------------------------------------------
--- The contract is the source of truth. These rows mirror it so the UI can list
--- and filter without reading the chain on every request.
-
-create table rentals (
-  id                uuid primary key default gen_random_uuid(),
-  onchain_rental_id bigint unique,
-  listing_id        uuid not null references listings (id),
-  renter_address    wallet_address not null,
-  start_date        date not null,
-  end_date          date not null,
-  status            text not null default 'requested'
-                      check (status in ('requested', 'approved', 'active',
-                                        'returned', 'completed', 'cancelled',
-                                        'disputed')),
-  created_at        timestamptz not null default now(),
-  check (end_date >= start_date)
-);
-
-create index rentals_listing_idx on rentals (listing_id);
-create index rentals_renter_idx on rentals (renter_address);
+-- 4. Rentals: deliberately absent -------------------------------------------
+-- There is no rentals table, and that is the point. A rental lives in the escrow
+-- contract, which is the only thing that actually knows its state. Mirroring it here
+-- would create a second answer that can drift from the first, and the day they
+-- disagree there is no way to tell which is right. CLAUDE.md section 5 lists what
+-- belongs off chain and rentals are not on that list.
+--
+-- Chat and reviews therefore key off the on-chain rental id, a plain number, with no
+-- foreign key to enforce it. The contract enforces it instead: the API routes read the
+-- rental from the chain before writing either.
 
 -- 5. Chat -------------------------------------------------------------------
 
 create table messages (
   id         bigserial primary key,
-  rental_id  uuid not null references rentals (id) on delete cascade,
+  onchain_rental_id bigint not null,
   sender_address wallet_address not null,
   body       text not null,
   created_at timestamptz not null default now()
 );
 
-create index messages_thread_idx on messages (rental_id, created_at);
+create index messages_thread_idx on messages (onchain_rental_id, created_at);
 
 -- 6. Reviews ----------------------------------------------------------------
 -- Two-way: owner reviews renter, renter reviews owner. One review per side.
@@ -98,13 +87,15 @@ create index messages_thread_idx on messages (rental_id, created_at);
 
 create table reviews (
   id               uuid primary key default gen_random_uuid(),
-  rental_id        uuid not null references rentals (id) on delete cascade,
+  onchain_rental_id bigint not null,
   reviewer_address wallet_address not null,
   reviewee_address wallet_address not null,
   rating           smallint not null check (rating between 1 and 5),
   comment          text,
   created_at       timestamptz not null default now(),
-  unique (rental_id, reviewer_address)
+  -- One review per side. The database refuses a second one rather than the API route
+  -- having to check first and race with itself.
+  unique (onchain_rental_id, reviewer_address)
 );
 
 create index reviews_reviewee_idx on reviews (reviewee_address);
@@ -131,7 +122,6 @@ create index notifications_inbox_idx on notifications (recipient_address, is_rea
 alter table profiles       enable row level security;
 alter table listings       enable row level security;
 alter table listing_images enable row level security;
-alter table rentals        enable row level security;
 alter table messages       enable row level security;
 alter table reviews        enable row level security;
 alter table notifications  enable row level security;
@@ -139,7 +129,6 @@ alter table notifications  enable row level security;
 create policy public_read on profiles       for select using (true);
 create policy public_read on listings       for select using (true);
 create policy public_read on listing_images for select using (true);
-create policy public_read on rentals        for select using (true);
 create policy public_read on reviews        for select using (true);
 
 -- Chat and notifications are not public. Only the API route reads them, using

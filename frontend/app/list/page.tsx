@@ -218,13 +218,27 @@ export default function ListPage() {
             error={errors.images}
             hint="JPG, PNG or WebP, under 5MB each. Nothing uploads until you publish."
           >
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              onChange={(e) => pickPhotos(Array.from(e.target.files ?? []))}
-              className="w-full rounded-control border border-line bg-surface px-3 py-2 text-sm"
-            />
+            {/* The native file input draws its own button and label in the browser's
+                language, which put Vietnamese in the middle of an English page. There is
+                no attribute that changes that text, so the input is hidden and this label
+                stands in for it: clicking a label still opens the picker. */}
+            <label className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-control border border-line bg-surface px-3 py-2 text-sm">
+              <span className={files.length > 0 ? undefined : "text-ink-muted"}>
+                {files.length === 0
+                  ? "No photos chosen yet"
+                  : `${files.length} of ${IMAGES_PER_LISTING} chosen`}
+              </span>
+              <span className="rounded-control border border-line px-3 py-1 text-xs">
+                {files.length === 0 ? "Choose photos" : "Change"}
+              </span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={(e) => pickPhotos(Array.from(e.target.files ?? []))}
+                className="hidden"
+              />
+            </label>
           </Field>
 
           {previews.length > 0 && (

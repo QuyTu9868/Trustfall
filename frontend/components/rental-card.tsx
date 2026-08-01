@@ -4,12 +4,19 @@ import { useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount, useConfig } from "wagmi";
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { DepositCountdown } from "@/components/deposit-countdown";
 import { ShowHandoverCode } from "@/components/handover-code";
+import { ReviewBox } from "@/components/review-box";
 import { ScanHandover } from "@/components/scan-handover";
 import { StatusStrip } from "@/components/status-strip";
 import { targetChain } from "@/lib/chain";
 import { USDC_DECIMALS, escrowAbi, escrowAddress, type Rental } from "@/lib/escrow";
 import { useNetworkReady } from "@/lib/use-network-ready";
+import { useSecondsLeft } from "@/lib/use-seconds-left";
+import { useSettlement } from "@/lib/use-settlement";
+
+/** Mirrors RentalEscrow.DISPUTE_WINDOW. */
+const DISPUTE_WINDOW = 3n * 24n * 60n * 60n;
 
 function money(value: bigint) {
   return Number(formatUnits(value, USDC_DECIMALS)).toFixed(2);
@@ -20,11 +27,12 @@ function day(seconds: bigint) {
 }
 
 /**
- * One rental, with only the moves that are actually available to whoever is looking.
+ * One rental, showing only the moves available to whoever is looking.
  *
- * The pairing is deliberate and matches the contract: at check-in the owner shows a code
+ * The pairing is deliberate and matches the contract. At check-in the owner shows a code
  * and the renter submits it, so an owner cannot take the rent without handing the item
- * over. Showing both sides of every action to everybody would hide that.
+ * over. At check-out it reverses: the renter shows, the owner submits, so nobody is
+ * marked as having returned something they still have.
  */
 export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: () => void }) {
   const config = useConfig();
@@ -38,7 +46,18 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
   const isOwner = me === rental.owner.toLowerCase();
   const isRenter = me === rental.renter.toLowerCase();
 
-  async function send(fn: "approveRental" | "cancel", label: string) {
+  const settled = rental.status === "Returned" || rental.status === "Completed";
+  const settlement = useSettlement(rental.id, settled);
+
+  // From Returned the clock runs from the confirmed return. From Active nobody confirmed
+  // anything, so it runs from the day the booking ended.
+  const releaseAt =
+    rental.status === "Returned"
+      ? rental.returnedAt + DISPUTE_WINDOW
+      : rental.endDate + DISPUTE_WINDOW;
+  const canRelease = useSecondsLeft(releaseAt) === 0;
+
+  async function send(fn: "approveRental" | "cancel" | "finalize", label: string) {
     setError(null);
     if (!escrowAddress || !(await ensureReady())) return;
     setBusy(label);
@@ -86,6 +105,22 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
 
       <StatusStrip status={rental.status} />
 
+      {/* What the rental actually cost, straight from the RentSettled event. */}
+      {settlement && (
+        <dl className="flex flex-col gap-1.5 rounded-card border border-line bg-canvas p-4 text-sm">
+          <Row label="Rent charged">{money(settlement.charged)}</Row>
+          <Row label="To the owner">{money(settlement.toOwner)}</Row>
+          <Row label="Platform fee, 1%">{money(settlement.fee)}</Row>
+          {settlement.refundedToRenter > 0n && (
+            <Row label="Refunded to the renter, days not used" highlight>
+              {money(settlement.refundedToRenter)}
+            </Row>
+          )}
+        </dl>
+      )}
+
+      {rental.status === "Returned" && <DepositCountdown releaseAt={releaseAt} />}
+
       <div className="flex flex-wrap items-center gap-2">
         {isOwner && rental.status === "Requested" && (
           <>
@@ -124,25 +159,43 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
           </>
         )}
 
-        {rental.status === "Active" && (
-          <span className="text-xs text-ink-muted">
-            Collected{" "}
-            {new Date(Number(rental.checkedInAt) * 1000).toLocaleString()}. Returning it
-            arrives in checkpoint 7.
-          </span>
+        {/* Check-out reverses the roles: the renter offers the item back, the owner is
+            the one who confirms having received it. */}
+        {isRenter && rental.status === "Active" && (
+          <Action onClick={() => setPanel("show")}>Show the return code</Action>
+        )}
+        {isOwner && rental.status === "Active" && (
+          <Action onClick={() => setPanel("scan")}>Scan to take it back</Action>
+        )}
+
+        {rental.status === "Returned" && (
+          <Action
+            onClick={() => send("finalize", "finalize")}
+            busy={busy === "finalize"}
+            disabled={!canRelease}
+          >
+            {canRelease ? "Release the deposit" : "Deposit is still held"}
+          </Action>
         )}
       </div>
+
+      {rental.status === "Active" && (
+        <p className="text-xs text-ink-muted">
+          Collected {new Date(Number(rental.checkedInAt) * 1000).toLocaleString()}. A day
+          is 24 hours from then, and the rent is worked out when it comes back.
+        </p>
+      )}
 
       {panel === "show" && (
         <ShowHandoverCode
           rentalId={rental.id}
-          action="checkIn"
+          action={rental.status === "Active" ? "checkOut" : "checkIn"}
           onClose={() => setPanel("none")}
         />
       )}
       {panel === "scan" && (
         <ScanHandover
-          action="checkIn"
+          action={rental.status === "Active" ? "checkOut" : "checkIn"}
           onClose={() => setPanel("none")}
           onDone={() => {
             setPanel("none");
@@ -151,25 +204,54 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
         />
       )}
 
+      {rental.status === "Completed" && (
+        <ReviewBox
+          rentalId={rental.id}
+          counterparty={isOwner ? rental.renter : rental.owner}
+          role={isOwner ? "owner" : "renter"}
+        />
+      )}
+
       {error && <p className="text-xs text-stop-ink">{error}</p>}
     </article>
+  );
+}
+
+function Row({
+  label,
+  children,
+  highlight,
+}: {
+  label: string;
+  children: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className={highlight ? "text-live-ink" : "text-ink-muted"}>{label}</dt>
+      <dd className={highlight ? "text-live-ink" : undefined}>
+        <span className="tabular">{children}</span> USDC
+      </dd>
+    </div>
   );
 }
 
 function Action({
   onClick,
   busy,
+  disabled,
   children,
 }: {
   onClick: () => void;
   busy?: boolean;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
-      disabled={busy}
-      className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white active:scale-[0.98] disabled:opacity-50"
+      disabled={busy || disabled}
+      className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white active:scale-[0.98] disabled:opacity-40"
     >
       {busy ? "Confirm in your wallet..." : children}
     </button>
