@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
 import { errorResponse } from "@/lib/api";
-import { localRpcUrl, targetChain } from "@/lib/chain";
-import { STATUS, escrowAbi, escrowAddress, type RentalTuple } from "@/lib/escrow";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
+import { RentalError, readRentalAsParty } from "@/lib/rental-server";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
-
-const chainClient = () =>
-  createPublicClient({
-    chain: targetChain,
-    transport: http(targetChain.id === 31337 ? localRpcUrl : undefined),
-  });
 
 /**
  * Writes one review.
@@ -33,30 +25,11 @@ export async function POST(request: Request) {
     if (typeof comment === "string" && comment.length > 1000) {
       return NextResponse.json({ error: "Comment is too long." }, { status: 400 });
     }
-    if (!escrowAddress) {
-      return NextResponse.json({ error: "No escrow on this network." }, { status: 500 });
-    }
+    const { rental, counterparty } = await readRentalAsParty(rentalId, reviewer);
 
-    const tuple = (await chainClient().readContract({
-      address: escrowAddress,
-      abi: escrowAbi,
-      functionName: "rentals",
-      args: [BigInt(rentalId)],
-    })) as RentalTuple;
-
-    const owner = tuple[1].toLowerCase();
-    const renter = tuple[2].toLowerCase();
-    const status = STATUS[tuple[11]];
-
-    if (reviewer !== owner && reviewer !== renter) {
+    if (rental.status !== "Completed") {
       return NextResponse.json(
-        { error: "Only the two people in a rental can review it." },
-        { status: 403 }
-      );
-    }
-    if (status !== "Completed") {
-      return NextResponse.json(
-        { error: `Reviews open once the rental is completed. This one is ${status}.` },
+        { error: `Reviews open once the rental is completed. This one is ${rental.status}.` },
         { status: 409 }
       );
     }
@@ -66,7 +39,7 @@ export async function POST(request: Request) {
       .insert({
         onchain_rental_id: Number(rentalId),
         reviewer_address: reviewer,
-        reviewee_address: reviewer === owner ? renter : owner,
+        reviewee_address: counterparty,
         rating: score,
         comment: typeof comment === "string" ? comment.trim() || null : null,
       });
@@ -81,6 +54,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {
     if (error instanceof AuthError) return errorResponse(error, 401);
+    if (error instanceof RentalError) return errorResponse(error, error.status);
     return errorResponse(error);
   }
 }

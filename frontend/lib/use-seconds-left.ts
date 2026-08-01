@@ -1,29 +1,45 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useBlock } from "wagmi";
+import { targetChain } from "./chain";
 
 /**
- * Seconds remaining until a timestamp, recomputed every second.
+ * Seconds remaining until a chain timestamp, counted on the chain's clock.
  *
- * The clock lives in state rather than being read during render, because reading
- * Date.now() while rendering gives React a component that returns something different
- * every time it is called with the same props. Two places need this number - the
- * countdown and the button it unlocks - and they have to agree, so they share one hook
- * instead of each keeping their own clock.
+ * The obvious version subtracts Date.now(), and it is wrong. Every deadline in the
+ * contract is compared against block.timestamp, so a countdown run off the browser clock
+ * is measuring a different clock from the one that decides. Two ways that bites: a
+ * machine whose time is off shows a number nobody else agrees with, and skipping the
+ * local chain forward three days leaves the countdown sitting exactly where it was.
+ *
+ * So the offset between the two clocks is measured from the latest block and the local
+ * clock only fills in the seconds between blocks. Wagmi's block query is shared, so the
+ * countdown and the button it unlocks read one clock rather than two.
  */
 export function useSecondsLeft(target: bigint) {
-  const [left, setLeft] = useState(() => secondsUntil(target));
+  const { data: block } = useBlock({
+    chainId: targetChain.id,
+    watch: true,
+  });
 
+  // Starting at zero would mean "the deadline has passed" for the one render before the
+  // effect runs, which is long enough to light up a Release the deposit button that
+  // should be dark. The browser clock is a good enough first guess until the block lands.
+  const [left, setLeft] = useState(() => Math.max(0, Number(target) - Math.floor(Date.now() / 1000)));
+  const chainTime = block?.timestamp;
+
+  // Reading the clock belongs in here rather than in the render body. A component that
+  // calls Date.now() while rendering returns something different every time React asks
+  // it the same question, which is the definition of not being pure.
   useEffect(() => {
-    const tick = () => setLeft(secondsUntil(target));
+    const offset = chainTime ? Number(chainTime) - Math.floor(Date.now() / 1000) : 0;
+    const tick = () =>
+      setLeft(Math.max(0, Number(target) - (Math.floor(Date.now() / 1000) + offset)));
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [target]);
+  }, [target, chainTime]);
 
   return left;
-}
-
-function secondsUntil(target: bigint) {
-  return Math.max(0, Number(target) - Math.floor(Date.now() / 1000));
 }

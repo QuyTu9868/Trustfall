@@ -39,9 +39,12 @@ export function StatusStrip({ status }: { status: Status }) {
               {step === "Active" ? "In use" : step}
             </span>
             {index < STATUS_STRIP.length - 1 && (
-              <span className={done ? "text-ink" : "text-line"} aria-hidden>
-                &mdash;
-              </span>
+              /* Drawn as a rule rather than typed as a character: the dash that reads
+                 best here is an em dash, and those are banned across this project. */
+              <span
+                className={`h-px w-4 ${done ? "bg-ink" : "bg-line"}`}
+                aria-hidden
+              />
             )}
           </li>
         );

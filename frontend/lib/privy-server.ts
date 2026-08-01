@@ -34,6 +34,16 @@ export async function readIdentityToken(request: Request) {
 }
 
 export async function walletFromIdentityToken(idToken: string | null) {
+  return (await userFromIdentityToken(idToken)).address;
+}
+
+/**
+ * The same verification, but keeping the email as well as the wallet.
+ *
+ * Only /api/profile needs this. Everything else takes the address alone, because a route
+ * that never reads the email cannot leak it.
+ */
+export async function userFromIdentityToken(idToken: string | null) {
   if (!appId || !appSecret) {
     throw new Error(
       "Privy is not configured. Set NEXT_PUBLIC_PRIVY_APP_ID and PRIVY_APP_SECRET in frontend/.env.local"
@@ -65,5 +75,8 @@ export async function walletFromIdentityToken(idToken: string | null) {
 
   // The database stores addresses lowercase: the wallet_address domain in schema.sql
   // rejects anything else, which stops the same wallet existing twice in two casings.
-  return address.toLowerCase();
+  //
+  // Somebody who signed in with a passkey or a wallet has no email at all, so this is
+  // routinely undefined rather than a sign that something went wrong.
+  return { address: address.toLowerCase(), email: user.email?.address ?? null };
 }

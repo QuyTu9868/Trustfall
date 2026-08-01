@@ -13,6 +13,10 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export const LISTING_IMAGE_BUCKET = "listing-images";
 
+// Private, unlike the listing bucket. A listing photo is an advert and is meant to be
+// seen by strangers; a photo of a scratch sent to one person is not.
+export const CHAT_IMAGE_BUCKET = "chat-images";
+
 export function getSupabaseAdmin() {
   if (!url || !serviceRoleKey) {
     throw new Error(

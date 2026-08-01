@@ -1,8 +1,10 @@
 "use client";
 
+import { useIdentityToken } from "@privy-io/react-auth";
 import { useEffect, useRef, useState } from "react";
 import { useConfig } from "wagmi";
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { announce } from "@/lib/announce";
 import { targetChain } from "@/lib/chain";
 import { escrowAbi, escrowAddress } from "@/lib/escrow";
 import { type HandoverAction, decodeHandover } from "@/lib/handover";
@@ -30,6 +32,7 @@ export function ScanHandover({
   onClose: () => void;
 }) {
   const config = useConfig();
+  const { identityToken } = useIdentityToken();
   const { ensureReady } = useNetworkReady();
   const video = useRef<HTMLVideoElement>(null);
   const [pasted, setPasted] = useState("");
@@ -69,6 +72,12 @@ export function ScanHandover({
         args: [BigInt(code.rentalId), BigInt(code.deadline), code.signature],
       });
       await waitForTransactionReceipt(config, { hash, chainId: targetChain.id });
+      // The person who scanned already knows. This is for the one who showed the code.
+      await announce(
+        BigInt(code.rentalId),
+        action === "checkIn" ? "checked-in" : "checked-out",
+        identityToken ?? undefined
+      );
       onDone();
     } catch (cause) {
       const err = cause as { name?: string; shortMessage?: string };

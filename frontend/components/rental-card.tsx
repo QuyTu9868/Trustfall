@@ -1,19 +1,32 @@
 "use client";
 
+import { useIdentityToken } from "@privy-io/react-auth";
 import { useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount, useConfig } from "wagmi";
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { ChatThread } from "@/components/chat-thread";
 import { DepositCountdown } from "@/components/deposit-countdown";
 import { ShowHandoverCode } from "@/components/handover-code";
 import { ReviewBox } from "@/components/review-box";
+import { RoleTag } from "@/components/role-tag";
 import { ScanHandover } from "@/components/scan-handover";
 import { StatusStrip } from "@/components/status-strip";
+import { UnreadBadge } from "@/components/unread-badge";
+import { announce } from "@/lib/announce";
 import { targetChain } from "@/lib/chain";
 import { USDC_DECIMALS, escrowAbi, escrowAddress, type Rental } from "@/lib/escrow";
 import { useNetworkReady } from "@/lib/use-network-ready";
 import { useSecondsLeft } from "@/lib/use-seconds-left";
 import { useSettlement } from "@/lib/use-settlement";
+import { useUnread } from "@/lib/use-unread";
+
+/** What each button means to the other side, once its transaction has landed. */
+const TOLD = {
+  approveRental: "approved",
+  cancel: "cancelled",
+  finalize: "completed",
+} as const;
 
 /** Mirrors RentalEscrow.DISPUTE_WINDOW. */
 const DISPUTE_WINDOW = 3n * 24n * 60n * 60n;
@@ -37,8 +50,11 @@ function day(seconds: bigint) {
 export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: () => void }) {
   const config = useConfig();
   const { address } = useAccount();
+  const { identityToken } = useIdentityToken();
+  const unread = useUnread();
   const { ensureReady } = useNetworkReady();
   const [panel, setPanel] = useState<"none" | "show" | "scan">("none");
+  const [chatOpen, setChatOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +86,8 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
         args: [rental.id],
       });
       await waitForTransactionReceipt(config, { hash, chainId: targetChain.id });
+      // After the receipt, so the server sees the status the notification claims.
+      await announce(rental.id, TOLD[fn], identityToken ?? undefined);
       onChanged();
     } catch (cause) {
       const err = cause as { name?: string; shortMessage?: string };
@@ -86,10 +104,10 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
   return (
     <article className="flex flex-col gap-4 rounded-card border border-line bg-surface p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col items-start gap-2">
+          <RoleTag owner={isOwner} />
           <span className="text-xs text-ink-muted">
-            Rental <span className="tabular">#{rental.id.toString()}</span> ·{" "}
-            {isOwner ? "you own this" : "you are renting"}
+            Rental <span className="tabular">#{rental.id.toString()}</span>
           </span>
           <span className="tabular text-sm">
             {day(rental.startDate)} to {day(rental.endDate)}
@@ -168,6 +186,13 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
           <Action onClick={() => setPanel("scan")}>Scan to take it back</Action>
         )}
 
+        <Secondary onClick={() => setChatOpen((open) => !open)}>
+          <span className="flex items-center gap-1.5">
+            {chatOpen ? "Hide messages" : "Messages"}
+            {!chatOpen && <UnreadBadge count={unread.counts[rental.id.toString()] ?? 0} />}
+          </span>
+        </Secondary>
+
         {rental.status === "Returned" && (
           <Action
             onClick={() => send("finalize", "finalize")}
@@ -185,6 +210,8 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
           is 24 hours from then, and the rent is worked out when it comes back.
         </p>
       )}
+
+      {chatOpen && <ChatThread rentalId={rental.id} />}
 
       {panel === "show" && (
         <ShowHandoverCode

@@ -82,6 +82,33 @@ Bốn dòng, không dài hơn. Entry dài thì không ai đọc lại.
 Chỗ này ghi những thói lặp đi lặp lại: gộp checkpoint khi luật bắt tách, sửa triệu
 chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "xong" khi chưa test.
 
+### [2026-08-01] Lặp lại đúng lỗi vừa tự ghi vào file này vài giờ trước
+
+- **Chuyện gì xảy ra:** Sáng ghi entry "viết một assert luôn đúng rồi tính nó là test đã
+  qua". Chiều viết script test cho checkpoint sau, lại đặt `check("chủ đơn được vào",
+  true)`. Vẫn in PASS, vẫn cộng vào tổng, vẫn suýt báo cáo là đã kiểm.
+- **Sai ở đâu:** Ghi ra không đồng nghĩa với nhớ. Luật hiện hành là chỉ ghi ERROR.md lúc
+  commit và chỉ đọc khi được yêu cầu, nên file này không hề nằm trong tầm mắt lúc đang
+  code, tức là nó không chặn được gì trong lượt đang chạy.
+- **Luật rút ra:** Những lỗi thuộc loại "viết ra rồi vẫn tái phạm" phải được biến thành
+  thứ tự chặn, không phải thứ để nhớ: một dòng lint, một helper `check` từ chối tham số
+  là hằng số, hoặc một bước rà lại trước khi báo cáo. Ghi chú chỉ hữu ích khi nâng cấp
+  skill, không hữu ích khi đang gõ.
+- **Skill đích:** `contract-test-audit`
+
+### [2026-08-01] Phá luật cứng nhất của dự án ngay trên màn hình, suốt bốn checkpoint
+
+- **Chuyện gì xảy ra:** CLAUDE.md mục 3.1 cấm dấu gạch dài trong mọi thứ, gồm cả chuỗi
+  hiển thị. Dải trạng thái đơn thuê và dải ba bước trang đăng tin nối các mốc bằng
+  `&mdash;`, tức là gạch dài hiện thẳng cho người dùng nhìn, từ checkpoint 4 tới 8.
+- **Sai ở đâu:** Kiểm luật đó ở phần văn xuôi mình gõ ra, nhưng không kiểm ở **HTML
+  entity** trong code. `&mdash;` không trông giống dấu gạch dài khi đọc code, nên nó lọt
+  qua mọi lần đọc lại.
+- **Luật rút ra:** Luật về ký tự phải soát ở dạng đã render, không phải dạng nguồn. Grep
+  cả entity lẫn ký tự thật (`&mdash;`, `&#8212;`, `—`). Và khi cần một gạch nối trong
+  giao diện thì vẽ bằng CSS chứ đừng gõ ký tự, vừa đúng luật vừa nhìn gọn hơn.
+- **Skill đích:** `minimalist-ui`
+
 ### [2026-07-30] Cắt output bằng `tail` nên không thấy cảnh báo ở đầu
 
 - **Chuyện gì xảy ra:** Suốt checkpoint 0, mỗi lần chạy `forge test` và `hardhat compile`
@@ -428,6 +455,36 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   thành công là bằng chứng về runtime, không phải bằng chứng về kiểu.
 - **Luật rút ra:** Viết thêm code sau lần typecheck cuối thì phải typecheck lại trước khi
   báo xong. Việc chạy được không thay thế được việc biên dịch được.
+- **Skill đích:** `vibe-code-dapp`
+
+### [2026-08-01] Hai chỗ cùng trả lời "tôi là ai", và chúng lệch nhau
+
+- **Chuyện gì xảy ra:** Nút bấm gửi giao dịch lấy địa chỉ từ ví đang chọn trong MetaMask.
+  Mọi thứ gọi API lại nhận diện bằng token đăng nhập, vốn chốt từ lúc login. User đổi ví
+  trong extension thì chỉ vế đầu đổi. Header hiện ví mới, còn chat, chuông và badge vẫn là
+  của ví cũ: tin nhắn gửi cho ví đang hiện thì không thấy, mở luồng ra lại đánh dấu đã đọc
+  cho người khác. Nặng hơn phần nhìn thấy: chữ ký đi từ ví này còn server ghi sổ cho ví kia.
+- **Sai ở đâu:** Coi "địa chỉ ví" là một dữ kiện duy nhất, trong khi hệ thống có **hai
+  nguồn** trả lời cùng một câu hỏi và không có gì buộc chúng khớp nhau. Không hề kiểm
+  chúng có bằng nhau không, nên lúc lệch thì lệch âm thầm và giao diện vẫn trông bình thường.
+- **Luật rút ra:** Dựng app có đăng nhập kèm ví thì liệt kê ra **mọi nguồn danh tính** rồi
+  so chúng ở một chỗ. Lệch nhau thì dừng và bắt đăng nhập lại, không đoán bên nào đúng.
+  Kèm theo: đổi ví trong extension không remount gì cả, phải bắt sự kiện `accountsChanged`
+  rồi tải lại trang, vì state React còn lại từ ví trước chính là thứ hiện nhầm địa chỉ.
+  Dấu hiệu nhận ra sớm: cùng một thực thể mà chỗ này đọc từ ví, chỗ kia đọc từ phiên.
+- **Skill đích:** `frontend-e2e-wallet`
+
+### [2026-08-01] Đếm ngược bằng đồng hồ máy trong khi contract xét đồng hồ chain
+
+- **Chuyện gì xảy ra:** Đồng hồ đếm tới lúc nhả cọc tính bằng `Date.now()`, còn contract
+  so với `block.timestamp`. Bấm nút dev tua chain 3 ngày thì chain nhảy, màn hình đứng
+  yên, nút nhả cọc vẫn mờ. Nhìn như nút tua hỏng, thật ra là đồng hồ trên màn hình đo
+  nhầm cái đồng hồ.
+- **Sai ở đâu:** Lấy nguồn thời gian tiện tay nhất thay vì nguồn mà **bên ra quyết định**
+  đang dùng. Máy người dùng lệch giờ cũng ra cùng một lỗi, chỉ là không ai để ý.
+- **Luật rút ra:** Hiển thị một hạn chót do contract xét thì phải lấy mốc từ block mới
+  nhất rồi tính chênh lệch, đồng hồ máy chỉ dùng để lấp các giây giữa hai block. Tổng
+  quát hơn: số nào contract quyết thì đọc từ contract, đừng tính lại ở frontend.
 - **Skill đích:** `vibe-code-dapp`
 
 ### [2026-08-01] Dùng control gốc của trình duyệt trong app một ngôn ngữ

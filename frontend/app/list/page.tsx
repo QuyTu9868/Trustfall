@@ -320,9 +320,11 @@ function Steps({ current }: { current: Step }) {
               <span className="tabular">{number}</span> {label}
             </span>
             {index < labels.length - 1 && (
-              <span className={done ? "text-ink-strong" : "text-line"} aria-hidden>
-                &mdash;
-              </span>
+              /* A rule, not an em dash. Same reason as the rental status strip. */
+              <span
+                className={`h-px w-5 ${done ? "bg-ink-strong" : "bg-line"}`}
+                aria-hidden
+              />
             )}
           </li>
         );

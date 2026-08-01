@@ -1,5 +1,6 @@
 "use client";
 
+import { useIdentityToken } from "@privy-io/react-auth";
 import { useState } from "react";
 import { useAccount, useConfig } from "wagmi";
 import {
@@ -8,6 +9,7 @@ import {
   waitForTransactionReceipt,
   writeContract,
 } from "wagmi/actions";
+import { announce } from "./announce";
 import { targetChain } from "./chain";
 import { escrowAbi, escrowAddress, usdcAbi, usdcAddress } from "./escrow";
 import { useNetworkReady } from "./use-network-ready";
@@ -35,6 +37,7 @@ export type RequestArgs = {
  * the request.
  */
 export function useRequestRental() {
+  const { identityToken } = useIdentityToken();
   const config = useConfig();
   const { address } = useAccount();
   const { ensureReady, error: networkError, clearError } = useNetworkReady();
@@ -156,7 +159,14 @@ export function useRequestRental() {
       const log = receipt.logs.find(
         (entry) => entry.address.toLowerCase() === escrow.toLowerCase()
       );
-      return log?.topics[1] ? BigInt(log.topics[1]) : null;
+      const id = log?.topics[1] ? BigInt(log.topics[1]) : null;
+
+      // The owner is the one person in this flow who is not looking at a screen, and a
+      // request nobody accepts earns nobody anything. This is the notification that
+      // CLAUDE.md singles out for an email as well as a bell.
+      if (id !== null) await announce(id, "requested", identityToken ?? undefined);
+
+      return id;
     } catch (cause) {
       setError(readableError(cause));
       return null;
