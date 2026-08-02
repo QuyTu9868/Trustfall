@@ -94,6 +94,12 @@ Description: ${input.description}
         // different verdict has no idea what the rules are.
         temperature: 0,
         response_format: { type: "json_object" },
+        // Room to think and still have room left to answer. Measured: qwen spends about
+        // 1200 tokens reasoning about a short listing, and when the budget runs out mid
+        // thought it emits nothing at all. Groq then rejects the whole request with a 400
+        // rather than returning bad JSON, so an unset budget is a listing that cannot be
+        // published for reasons nobody can see.
+        max_completion_tokens: 4096,
         // Keeps the reasoning out of the reply. Measured: it saves no tokens, because the
         // model still does the thinking either way. readVerdict copes with it present
         // regardless, since a provider that quietly stops honouring this must not open
@@ -132,6 +138,14 @@ Description: ${input.description}
 
   if (!response.ok) {
     const detail = await response.text();
+    // The model ran out of room and returned nothing. Worth its own sentence because the
+    // raw error names JSON validation, which sends whoever reads it looking for a bug in
+    // the format rather than at the token budget.
+    if (detail.includes("json_validate_failed")) {
+      throw new ModerationUnavailable(
+        "The checker ran out of room before it answered. Shorten the description and try again."
+      );
+    }
     throw new ModerationUnavailable(
       `The listing checker refused the request: ${detail.slice(0, 200)}`
     );
