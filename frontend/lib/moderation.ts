@@ -187,10 +187,13 @@ Description: ${input.description}
         // blank test images and not for real photographs, which give it far more to think
         // about, and 2560 was still not enough with the full policy in front of it.
         //
-        // 3000 is therefore near the ceiling rather than a comfortable middle. On the free
-        // tier a two photo listing barely fits at all, and the room to move is in the
-        // policy above: every line of it is read and reasoned about on every listing.
-        max_completion_tokens: 3000,
+        // The window between the two is narrow enough that it had to be found by binary
+        // search against real photographs: 3000 was refused as too large at 8143, 2560 ran
+        // out of room, 2816 fits and finishes with 2018 spent. There is no comfortable
+        // middle here, and the free tier is the reason. The room to move, if it is ever
+        // needed, is in the policy above: every line of it is read and reasoned about on
+        // every single listing.
+        max_completion_tokens: 2816,
         // Keeps the reasoning out of the reply. Measured: it saves no tokens, because the
         // model still does the thinking either way. readVerdict copes with it present
         // regardless, since a provider that quietly stops honouring this must not open
