@@ -12,7 +12,7 @@ const nav = [
   { href: "/list", label: "List an item" },
   { href: "/listings/mine", label: "Your listings" },
   { href: "/rentals", label: "Rentals" },
-  { href: "/messages", label: "Messages" },
+  { href: "/profile", label: "Profile" },
 ];
 
 export function SiteHeader() {
@@ -39,7 +39,7 @@ export function SiteHeader() {
                 }`}
               >
                 {item.label}
-                {item.href === "/messages" && <UnreadBadge count={unread.total} />}
+                {item.href === "/profile" && <UnreadBadge count={unread.total} />}
               </Link>
             );
           })}

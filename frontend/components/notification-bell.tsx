@@ -4,6 +4,8 @@ import { usePrivy } from "@privy-io/react-auth";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
+import { badgeCount } from "@/lib/badge-count";
+import { useUnread } from "@/lib/use-unread";
 
 type Notification = {
   id: number;
@@ -18,19 +20,27 @@ type Notification = {
 const POLL_MS = 15000;
 
 /**
- * The bell in the header, with a dot when something is waiting.
+ * The bell, split into what happened and who is waiting for a reply.
  *
- * Polls slowly. Nothing here is urgent enough to justify a socket, and the header sits on
- * every page, so whatever it does it does everywhere at once.
+ * Two lists rather than one, because they are answered differently. A rental moving on is
+ * news you read; an unread message is somebody waiting. Mixed together, the messages get
+ * buried under six lines about deposits and nobody replies.
+ *
+ * The message half is not built from notification rows. Messages stopped writing those
+ * when the unread badges arrived, and rebuilding them now would mean two mechanisms
+ * counting the same thing and eventually disagreeing. The counts are the source.
  */
 export function NotificationBell() {
   const { authenticated } = usePrivy();
   const { address } = useAccount();
+  const unread = useUnread();
+
   // The list is kept with the wallet it belongs to. Sign out of one account and into
   // another and the old notifications would otherwise sit on screen, addressed to
   // somebody else, until the first poll of the new session came back.
   const [loaded, setLoaded] = useState<{ owner?: string; list: Notification[] }>({ list: [] });
   const [open, setOpen] = useState(false);
+  const [section, setSection] = useState<"rentals" | "messages" | null>(null);
 
   useEffect(() => {
     if (!authenticated || !address) return;
@@ -58,14 +68,18 @@ export function NotificationBell() {
   if (!authenticated) return null;
 
   const items = loaded.owner === address ? loaded.list : [];
-  const unread = items.filter((item) => !item.is_read).length;
+  const unreadNotices = items.filter((item) => !item.is_read).length;
+  const threads = Object.entries(unread.counts).filter(([, count]) => count > 0);
+  const total = unreadNotices + unread.total;
 
   async function toggle() {
     const nowOpen = !open;
     setOpen(nowOpen);
-    // Opening the list is what counts as having seen it. Marking read on close would
-    // leave the dot up while the user is looking straight at the thing it refers to.
-    if (nowOpen && unread > 0) {
+    setSection(null);
+    // Opening the list is what counts as having seen the news. Messages are not marked
+    // here: those clear when the conversation is actually opened, because a glance at a
+    // count is not the same as having read what somebody wrote.
+    if (nowOpen && unreadNotices > 0) {
       setLoaded((current) => ({
         ...current,
         list: current.list.map((item) => ({ ...item, is_read: true })),
@@ -78,11 +92,11 @@ export function NotificationBell() {
     <div className="relative">
       <button
         onClick={toggle}
-        aria-label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
+        aria-label={total > 0 ? `${total} unread` : "Notifications"}
         className="relative flex h-8 w-8 items-center justify-center rounded-control border border-line text-sm"
       >
         <BellIcon />
-        {unread > 0 && (
+        {total > 0 && (
           <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-stop-ink" />
         )}
       </button>
@@ -98,28 +112,102 @@ export function NotificationBell() {
             className="fixed inset-0 z-10 cursor-default"
           />
           <div className="absolute right-0 z-20 mt-2 flex w-80 flex-col divide-y divide-line rounded-card border border-line bg-surface shadow-sm">
-            {items.length === 0 && (
-              <p className="p-4 text-xs text-ink-muted">Nothing yet.</p>
-            )}
-            {items.map((item) => (
-              <Link
-                key={item.id}
-                // News about a listing belongs on the listings page, not the rentals one.
-                // A notification that opens somewhere unrelated is a notification people
-                // stop opening.
-                href={item.listing_id ? "/listings/mine" : "/rentals"}
-                onClick={() => setOpen(false)}
-                className="flex flex-col gap-1 p-3 text-sm"
-              >
-                <span>{item.body}</span>
-                <span className="text-[11px] text-ink-muted">
-                  {new Date(item.created_at).toLocaleString()}
-                </span>
-              </Link>
-            ))}
+            <Section
+              title="Rentals and listings"
+              count={items.length}
+              badge={unreadNotices}
+              open={section === "rentals"}
+              onToggle={() => setSection(section === "rentals" ? null : "rentals")}
+            >
+              {items.length === 0 ? (
+                <p className="px-3 pb-3 text-xs text-ink-muted">Nothing yet.</p>
+              ) : (
+                items.map((item) => (
+                  <Link
+                    key={item.id}
+                    // News about a listing belongs on the listings page, not the rentals
+                    // one. A notification that opens somewhere unrelated is a notification
+                    // people stop opening.
+                    href={item.listing_id ? "/listings/mine" : "/profile"}
+                    onClick={() => setOpen(false)}
+                    className="flex flex-col gap-1 border-t border-line p-3 text-sm"
+                  >
+                    <span>{item.body}</span>
+                    <span className="text-[11px] text-ink-muted">
+                      {new Date(item.created_at).toLocaleString()}
+                    </span>
+                  </Link>
+                ))
+              )}
+            </Section>
+
+            <Section
+              title="Messages"
+              count={threads.length}
+              badge={unread.total}
+              open={section === "messages"}
+              onToggle={() => setSection(section === "messages" ? null : "messages")}
+            >
+              {threads.length === 0 ? (
+                <p className="px-3 pb-3 text-xs text-ink-muted">Nobody is waiting.</p>
+              ) : (
+                threads.map(([rentalId, count]) => (
+                  <Link
+                    key={rentalId}
+                    href="/profile"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-between gap-2 border-t border-line p-3 text-sm"
+                  >
+                    <span className="tabular">Rental #{rentalId}</span>
+                    <span className="text-xs text-ink-muted">
+                      {badgeCount(count)} waiting
+                    </span>
+                  </Link>
+                ))
+              )}
+            </Section>
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** A heading that opens and closes. Pressing it again closes it, as asked. */
+function Section({
+  title,
+  count,
+  badge,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  count: number;
+  badge: number;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col">
+      <button
+        onClick={onToggle}
+        className="flex items-center justify-between gap-2 p-3 text-left text-sm"
+      >
+        <span className="flex items-center gap-2">
+          {title}
+          {badge > 0 && (
+            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-stop-ink px-1 text-[11px] leading-none text-white tabular">
+              {badgeCount(badge)}
+            </span>
+          )}
+        </span>
+        <span className="text-xs text-ink-muted">
+          {count} {open ? "hide" : "show"}
+        </span>
+      </button>
+      {open && <div className="flex flex-col">{children}</div>}
     </div>
   );
 }

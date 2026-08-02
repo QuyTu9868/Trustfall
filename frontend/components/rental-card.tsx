@@ -211,7 +211,6 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
         </p>
       )}
 
-      {chatOpen && <ChatThread rentalId={rental.id} />}
 
       {panel === "show" && (
         <ShowHandoverCode
@@ -231,12 +230,24 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
         />
       )}
 
-      {rental.status === "Completed" && (
-        <ReviewBox
-          rentalId={rental.id}
-          counterparty={isOwner ? rental.renter : rental.owner}
-          role={isOwner ? "owner" : "renter"}
-        />
+      {/* Two columns once both are on screen. Stacked, the review form read as the next
+          thing to fill in after the conversation, and people started typing their review
+          into the chat box. Side by side they are plainly two different things. */}
+      {(chatOpen || rental.status === "Completed") && (
+        <div
+          className={`grid gap-4 ${
+            chatOpen && rental.status === "Completed" ? "lg:grid-cols-2" : ""
+          }`}
+        >
+          {rental.status === "Completed" && (
+            <ReviewBox
+              rentalId={rental.id}
+              counterparty={isOwner ? rental.renter : rental.owner}
+              role={isOwner ? "owner" : "renter"}
+            />
+          )}
+          {chatOpen && <ChatThread rentalId={rental.id} />}
+        </div>
       )}
 
       {error && <p className="text-xs text-stop-ink">{error}</p>}

@@ -11,7 +11,23 @@ const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // One QueryClient per browser session, not one per render.
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            // Keeps polling in a window that is not focused. React Query pauses intervals
+            // when a tab loses focus, which is sensible for one tab and wrong here: the
+            // whole product is two people acting on the same rental, and testing it means
+            // two windows side by side. One of them is always unfocused, and that one used
+            // to sit on stale data until it was clicked, looking like the chain had not
+            // moved. Chat and the bell never showed this because they poll with plain
+            // intervals, which nothing pauses.
+            refetchIntervalInBackground: true,
+          },
+        },
+      })
+  );
 
   // Without an app id Privy throws on mount and the page goes blank, which is a
   // miserable way to find out one env var is missing. Say what is wrong instead.

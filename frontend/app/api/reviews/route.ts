@@ -67,16 +67,26 @@ export async function POST(request: Request) {
  */
 export async function GET(request: Request) {
   try {
-    const rentalId = new URL(request.url).searchParams.get("rentalId");
-    if (!rentalId) {
-      return NextResponse.json({ error: "Which rental?" }, { status: 400 });
+    const params = new URL(request.url).searchParams;
+    const rentalId = params.get("rentalId");
+    // Everything written about one person, for their own profile. Same public data, asked
+    // a different way: one rental's worth, or one person's worth.
+    const about = params.get("about")?.toLowerCase();
+
+    if (!rentalId && !about) {
+      return NextResponse.json({ error: "Which rental, or about whom?" }, { status: 400 });
     }
 
-    const { data, error } = await getSupabaseAdmin()
+    let query = getSupabaseAdmin()
       .from("reviews")
-      .select("reviewer_address, reviewee_address, rating, comment, created_at")
-      .eq("onchain_rental_id", Number(rentalId))
-      .order("created_at");
+      .select("onchain_rental_id, reviewer_address, reviewee_address, rating, comment, created_at")
+      .order("created_at", { ascending: false });
+
+    query = rentalId
+      ? query.eq("onchain_rental_id", Number(rentalId))
+      : query.eq("reviewee_address", about!);
+
+    const { data, error } = await query;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ reviews: data ?? [] });
