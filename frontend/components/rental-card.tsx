@@ -15,7 +15,13 @@ import { StatusStrip } from "@/components/status-strip";
 import { UnreadBadge } from "@/components/unread-badge";
 import { announce } from "@/lib/announce";
 import { targetChain } from "@/lib/chain";
-import { USDC_DECIMALS, escrowAbi, escrowAddress, type Rental } from "@/lib/escrow";
+import {
+  USDC_DECIMALS,
+  escrowAbi,
+  escrowAddress,
+  type Rental,
+  type Status,
+} from "@/lib/escrow";
 import { useNetworkReady } from "@/lib/use-network-ready";
 import { useSecondsLeft } from "@/lib/use-seconds-left";
 import { useSettlement } from "@/lib/use-settlement";
@@ -47,13 +53,27 @@ function day(seconds: bigint) {
  * over. At check-out it reverses: the renter shows, the owner submits, so nobody is
  * marked as having returned something they still have.
  */
-export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: () => void }) {
+export function RentalCard({
+  rental,
+  onChanged,
+}: {
+  rental: Rental;
+  onChanged: () => void;
+}) {
   const config = useConfig();
   const { address } = useAccount();
   const { identityToken } = useIdentityToken();
   const unread = useUnread();
   const { ensureReady } = useNetworkReady();
-  const [panel, setPanel] = useState<"none" | "show" | "scan">("none");
+  // Which panel is open, and which status it was opened for. Tying the two together is
+  // what closes it: after a check-out lands the rental becomes Returned, and a panel that
+  // survived that was still offering a handover code, recomputed as a check-in code for a
+  // rental that had already come back.
+  const [panel, setPanel] = useState<{
+    kind: "show" | "scan";
+    at: Status;
+  } | null>(null);
+  const openPanel = panel?.at === rental.status ? panel.kind : null;
   const [chatOpen, setChatOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +93,10 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
       : rental.endDate + DISPUTE_WINDOW;
   const canRelease = useSecondsLeft(releaseAt) === 0;
 
-  async function send(fn: "approveRental" | "cancel" | "finalize", label: string) {
+  async function send(
+    fn: "approveRental" | "cancel" | "finalize",
+    label: string,
+  ) {
     setError(null);
     if (!escrowAddress || !(await ensureReady())) return;
     setBusy(label);
@@ -85,7 +108,10 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
         chainId: targetChain.id,
         args: [rental.id],
       });
-      await waitForTransactionReceipt(config, { hash, chainId: targetChain.id });
+      await waitForTransactionReceipt(config, {
+        hash,
+        chainId: targetChain.id,
+      });
       // After the receipt, so the server sees the status the notification claims.
       await announce(rental.id, TOLD[fn], identityToken ?? undefined);
       onChanged();
@@ -94,7 +120,7 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
       setError(
         err.name === "UserRejectedRequestError"
           ? "You cancelled it."
-          : (err.shortMessage ?? "That did not go through.")
+          : (err.shortMessage ?? "That did not go through."),
       );
     } finally {
       setBusy(null);
@@ -121,134 +147,166 @@ export function RentalCard({ rental, onChanged }: { rental: Rental; onChanged: (
         </div>
       </div>
 
-      <StatusStrip status={rental.status} />
+      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+        <div className="flex flex-col gap-4">
+          <StatusStrip status={rental.status} />
 
-      {/* What the rental actually cost, straight from the RentSettled event. */}
-      {settlement && (
-        <dl className="flex flex-col gap-1.5 rounded-card border border-line bg-canvas p-4 text-sm">
-          <Row label="Rent charged">{money(settlement.charged)}</Row>
-          <Row label="To the owner">{money(settlement.toOwner)}</Row>
-          <Row label="Platform fee, 1%">{money(settlement.fee)}</Row>
-          {settlement.refundedToRenter > 0n && (
-            <Row label="Refunded to the renter, days not used" highlight>
-              {money(settlement.refundedToRenter)}
-            </Row>
+          {/* What the rental actually cost, straight from the RentSettled event. */}
+          {settlement && (
+            <dl className="flex flex-col gap-1.5 rounded-card border border-line bg-canvas p-4 text-sm">
+              <Row label="Rent charged">{money(settlement.charged)}</Row>
+              <Row label="To the owner">{money(settlement.toOwner)}</Row>
+              <Row label="Platform fee, 1%">{money(settlement.fee)}</Row>
+              {settlement.refundedToRenter > 0n && (
+                <Row label="Refunded to the renter, days not used" highlight>
+                  {money(settlement.refundedToRenter)}
+                </Row>
+              )}
+            </dl>
           )}
-        </dl>
-      )}
 
-      {rental.status === "Returned" && <DepositCountdown releaseAt={releaseAt} />}
+          {rental.status === "Returned" && (
+            <DepositCountdown releaseAt={releaseAt} />
+          )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {isOwner && rental.status === "Requested" && (
-          <>
-            <Action onClick={() => send("approveRental", "approve")} busy={busy === "approve"}>
-              Accept
-            </Action>
-            <Secondary onClick={() => send("cancel", "reject")} busy={busy === "reject"}>
-              Decline
-            </Secondary>
-          </>
-        )}
+          <div className="flex flex-wrap items-center gap-2">
+            {isOwner && rental.status === "Requested" && (
+              <>
+                <Action
+                  onClick={() => send("approveRental", "approve")}
+                  busy={busy === "approve"}
+                >
+                  Accept
+                </Action>
+                <Secondary
+                  onClick={() => send("cancel", "reject")}
+                  busy={busy === "reject"}
+                >
+                  Decline
+                </Secondary>
+              </>
+            )}
 
-        {isRenter && rental.status === "Requested" && (
-          <Secondary onClick={() => send("cancel", "cancel")} busy={busy === "cancel"}>
-            Cancel, full refund
-          </Secondary>
-        )}
+            {isRenter && rental.status === "Requested" && (
+              <Secondary
+                onClick={() => send("cancel", "cancel")}
+                busy={busy === "cancel"}
+              >
+                Cancel, full refund
+              </Secondary>
+            )}
 
-        {isOwner && rental.status === "Approved" && (
-          <>
-            <Action onClick={() => setPanel("show")}>Show the check-in code</Action>
-            <Secondary onClick={() => send("cancel", "cancel")} busy={busy === "cancel"}>
-              Cancel
-            </Secondary>
-          </>
-        )}
+            {isOwner && rental.status === "Approved" && (
+              <>
+                <Action
+                  onClick={() => setPanel({ kind: "show", at: rental.status })}
+                >
+                  Show the check-in code
+                </Action>
+                <Secondary
+                  onClick={() => send("cancel", "cancel")}
+                  busy={busy === "cancel"}
+                >
+                  Cancel
+                </Secondary>
+              </>
+            )}
 
-        {isRenter && rental.status === "Approved" && (
-          <>
-            <Action onClick={() => setPanel("scan")}>Scan to collect</Action>
-            {/* Says the cost out loud. Ten percent is a number people should see before
+            {isRenter && rental.status === "Approved" && (
+              <>
+                <Action
+                  onClick={() => setPanel({ kind: "scan", at: rental.status })}
+                >
+                  Scan to collect
+                </Action>
+                {/* Says the cost out loud. Ten percent is a number people should see before
                 they press, not discover on the receipt. */}
-            <Secondary onClick={() => send("cancel", "cancel")} busy={busy === "cancel"}>
-              Cancel, 10% of rent to the owner
-            </Secondary>
-          </>
-        )}
+                <Secondary
+                  onClick={() => send("cancel", "cancel")}
+                  busy={busy === "cancel"}
+                >
+                  Cancel, 10% of rent to the owner
+                </Secondary>
+              </>
+            )}
 
-        {/* Check-out reverses the roles: the renter offers the item back, the owner is
+            {/* Check-out reverses the roles: the renter offers the item back, the owner is
             the one who confirms having received it. */}
-        {isRenter && rental.status === "Active" && (
-          <Action onClick={() => setPanel("show")}>Show the return code</Action>
-        )}
-        {isOwner && rental.status === "Active" && (
-          <Action onClick={() => setPanel("scan")}>Scan to take it back</Action>
-        )}
+            {isRenter && rental.status === "Active" && (
+              <Action
+                onClick={() => setPanel({ kind: "show", at: rental.status })}
+              >
+                Show the return code
+              </Action>
+            )}
+            {isOwner && rental.status === "Active" && (
+              <Action
+                onClick={() => setPanel({ kind: "scan", at: rental.status })}
+              >
+                Scan to take it back
+              </Action>
+            )}
 
-        <Secondary onClick={() => setChatOpen((open) => !open)}>
-          <span className="flex items-center gap-1.5">
-            {chatOpen ? "Hide messages" : "Messages"}
-            {!chatOpen && <UnreadBadge count={unread.counts[rental.id.toString()] ?? 0} />}
-          </span>
-        </Secondary>
+            <Secondary onClick={() => setChatOpen((open) => !open)}>
+              <span className="flex items-center gap-1.5">
+                {chatOpen ? "Hide messages" : "Messages"}
+                {!chatOpen && (
+                  <UnreadBadge
+                    count={unread.counts[rental.id.toString()] ?? 0}
+                  />
+                )}
+              </span>
+            </Secondary>
 
-        {rental.status === "Returned" && (
-          <Action
-            onClick={() => send("finalize", "finalize")}
-            busy={busy === "finalize"}
-            disabled={!canRelease}
-          >
-            {canRelease ? "Release the deposit" : "Deposit is still held"}
-          </Action>
+            {rental.status === "Returned" && (
+              <Action
+                onClick={() => send("finalize", "finalize")}
+                busy={busy === "finalize"}
+                disabled={!canRelease}
+              >
+                {canRelease ? "Release the deposit" : "Deposit is still held"}
+              </Action>
+            )}
+          </div>
+
+          {rental.status === "Active" && (
+            <p className="text-xs text-ink-muted">
+              Collected{" "}
+              {new Date(Number(rental.checkedInAt) * 1000).toLocaleString()}. A
+              day is 24 hours from then, and the rent is worked out when it
+              comes back.
+            </p>
+          )}
+        </div>
+
+        {rental.status === "Completed" && (
+          <ReviewBox
+            rentalId={rental.id}
+            counterparty={isOwner ? rental.renter : rental.owner}
+            role={isOwner ? "owner" : "renter"}
+          />
         )}
       </div>
 
-      {rental.status === "Active" && (
-        <p className="text-xs text-ink-muted">
-          Collected {new Date(Number(rental.checkedInAt) * 1000).toLocaleString()}. A day
-          is 24 hours from then, and the rent is worked out when it comes back.
-        </p>
-      )}
-
-
-      {panel === "show" && (
+      {openPanel === "show" && (
         <ShowHandoverCode
           rentalId={rental.id}
           action={rental.status === "Active" ? "checkOut" : "checkIn"}
-          onClose={() => setPanel("none")}
+          onClose={() => setPanel(null)}
         />
       )}
-      {panel === "scan" && (
+      {openPanel === "scan" && (
         <ScanHandover
           action={rental.status === "Active" ? "checkOut" : "checkIn"}
-          onClose={() => setPanel("none")}
+          onClose={() => setPanel(null)}
           onDone={() => {
-            setPanel("none");
+            setPanel(null);
             onChanged();
           }}
         />
       )}
 
-      {/* Two columns once both are on screen. Stacked, the review form read as the next
-          thing to fill in after the conversation, and people started typing their review
-          into the chat box. Side by side they are plainly two different things. */}
-      {(chatOpen || rental.status === "Completed") && (
-        <div
-          className={`grid gap-4 ${
-            chatOpen && rental.status === "Completed" ? "lg:grid-cols-2" : ""
-          }`}
-        >
-          {rental.status === "Completed" && (
-            <ReviewBox
-              rentalId={rental.id}
-              counterparty={isOwner ? rental.renter : rental.owner}
-              role={isOwner ? "owner" : "renter"}
-            />
-          )}
-          {chatOpen && <ChatThread rentalId={rental.id} />}
-        </div>
-      )}
+      {chatOpen && <ChatThread rentalId={rental.id} />}
 
       {error && <p className="text-xs text-stop-ink">{error}</p>}
     </article>
@@ -266,7 +324,9 @@ function Row({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <dt className={highlight ? "text-live-ink" : "text-ink-muted"}>{label}</dt>
+      <dt className={highlight ? "text-live-ink" : "text-ink-muted"}>
+        {label}
+      </dt>
       <dd className={highlight ? "text-live-ink" : undefined}>
         <span className="tabular">{children}</span> USDC
       </dd>

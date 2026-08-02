@@ -128,7 +128,13 @@ export function NotificationBell() {
                     // News about a listing belongs on the listings page, not the rentals
                     // one. A notification that opens somewhere unrelated is a notification
                     // people stop opening.
-                    href={item.listing_id ? "/listings/mine" : "/profile"}
+                    href={
+                      item.listing_id
+                        ? "/listings/mine"
+                        : item.onchain_rental_id
+                          ? `/rentals/${item.onchain_rental_id}`
+                          : "/profile"
+                    }
                     onClick={() => setOpen(false)}
                     className="flex flex-col gap-1 border-t border-line p-3 text-sm"
                   >
@@ -154,7 +160,10 @@ export function NotificationBell() {
                 threads.map(([rentalId, count]) => (
                   <Link
                     key={rentalId}
-                    href="/profile"
+                    // Straight to the conversation. Sending somebody to a page listing
+                    // every rental, from a row that already named one, was a click that
+                    // looked like nothing had happened when they were already there.
+                    href={`/rentals/${rentalId}`}
                     onClick={() => setOpen(false)}
                     className="flex items-center justify-between gap-2 border-t border-line p-3 text-sm"
                   >

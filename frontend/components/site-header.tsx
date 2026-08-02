@@ -11,7 +11,6 @@ const nav = [
   { href: "/", label: "Browse" },
   { href: "/list", label: "List an item" },
   { href: "/listings/mine", label: "Your listings" },
-  { href: "/rentals", label: "Rentals" },
   { href: "/profile", label: "Profile" },
 ];
 

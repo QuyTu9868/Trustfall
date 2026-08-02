@@ -1,10 +1,10 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount } from "wagmi";
-import { RentalCard } from "@/components/rental-card";
 import { StatusStrip } from "@/components/status-strip";
 import { UnreadBadge } from "@/components/unread-badge";
 import { USDC_DECIMALS } from "@/lib/escrow";
@@ -38,12 +38,11 @@ function money(value: bigint) {
 export default function ProfilePage() {
   const { ready, authenticated, login } = usePrivy();
   const { address } = useAccount();
-  const { rentals, loading, refetch } = useMyRentals();
+  const { rentals, loading } = useMyRentals();
   const balances = useEscrowBalances(rentals);
   const unread = useUnread();
 
   const [reviews, setReviews] = useState<Review[] | null>(null);
-  const [openId, setOpenId] = useState<bigint | null>(null);
 
   useEffect(() => {
     if (!address) return;
@@ -117,7 +116,7 @@ export default function ProfilePage() {
       <section className="flex flex-col gap-4">
         <div className="flex items-baseline gap-3">
           <h2 className="text-xl">Your rentals</h2>
-          <span className="text-xs text-ink-muted">Open one to see it and to talk.</span>
+          <span className="text-xs text-ink-muted">Open one to act on it and to talk.</span>
         </div>
 
         {loading && rentals.length === 0 && (
@@ -127,34 +126,30 @@ export default function ProfilePage() {
           <p className="text-sm text-ink-muted">Nothing yet.</p>
         )}
 
+        {/* Each one opens its own page rather than unfolding here. A rental has a QR
+            code, a countdown, a settlement and a conversation in it, and four of those
+            expanded at once buries the list they were meant to be part of. Its own address
+            also means a notification can point straight at it. */}
         {rentals.map((rental) => {
-          const open = openId === rental.id;
           const mine = rental.owner.toLowerCase() === me;
           return (
-            <div key={rental.id.toString()} className="flex flex-col gap-3">
-              <button
-                onClick={() => setOpenId(open ? null : rental.id)}
-                className={`flex flex-wrap items-center justify-between gap-3 rounded-card border px-4 py-3 text-left ${
-                  open ? "border-ink-strong bg-surface" : "border-line bg-surface"
-                }`}
-              >
-                <span className="flex items-center gap-3">
-                  <span className="tabular text-sm">Rental #{rental.id.toString()}</span>
-                  <span className="text-xs text-ink-muted">
-                    {mine ? "you are lending" : "you are renting"}
-                  </span>
-                  <UnreadBadge count={unread.counts[rental.id.toString()] ?? 0} />
+            <Link
+              key={rental.id.toString()}
+              href={`/rentals/${rental.id}`}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3"
+            >
+              <span className="flex items-center gap-3">
+                <span className="tabular text-sm">Rental #{rental.id.toString()}</span>
+                <span className="text-xs text-ink-muted">
+                  {mine ? "you are lending" : "you are renting"}
                 </span>
-                <span className="flex items-center gap-3">
-                  <StatusStrip status={rental.status} />
-                  <span className="text-xs text-ink-muted">{open ? "close" : "open"}</span>
-                </span>
-              </button>
-
-              {/* The whole card, not a trimmed copy of it. Every button a rental needs is
-                  already there and a second slimmer version would drift from the first. */}
-              {open && <RentalCard rental={rental} onChanged={() => refetch()} />}
-            </div>
+                <UnreadBadge count={unread.counts[rental.id.toString()] ?? 0} />
+              </span>
+              <span className="flex items-center gap-3">
+                <StatusStrip status={rental.status} />
+                <span className="text-xs text-ink-muted">open</span>
+              </span>
+            </Link>
           );
         })}
       </section>
