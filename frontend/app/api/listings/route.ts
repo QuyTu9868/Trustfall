@@ -10,6 +10,7 @@ import {
   type Category,
 } from "@/lib/listing";
 import { ModerationUnavailable, moderateListing, toDataUrls } from "@/lib/moderation";
+import { notifyListingVerdict } from "@/lib/notify";
 import {
   AuthError,
   readIdentityToken,
@@ -62,27 +63,16 @@ async function createListing(request: Request) {
   });
   if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
-  // The gate. The browser ran this too, at step 2, so the owner saw it coming, but that
-  // call can simply not be made. Nothing is written or uploaded until this passes, so a
-  // rejected listing leaves no row and no file behind.
-  //
-  // Fails closed on purpose. A moderation step that waves listings through whenever the
-  // model is unreachable is not a moderation step, it is a delay.
-  const verdict = await moderateListing({
-    title,
-    description,
-    images: await toDataUrls(images),
-  });
-  if (verdict.decision === "reject") {
-    return NextResponse.json(
-      { error: "This listing was not accepted.", reasons: verdict.reasons },
-      { status: 422 }
-    );
-  }
-
   const supabase = getSupabaseAdmin();
 
-  // The row first, so an image can never be orphaned without a listing pointing at it.
+  // Saved before it is checked, and this order is the whole point of the change. The check
+  // can take the best part of a minute once the free tier starts rationing, and anybody
+  // who reloaded during that wait used to lose a description and two photographs with no
+  // way to get them back.
+  //
+  // Draft and pending, so nothing half checked is ever browsable. The verdict decides
+  // whether it becomes published, and it arrives by way of the bell because the page that
+  // asked for it may well be gone by then.
   const { data: listing, error: insertError } = await supabase
     .from("listings")
     .insert({
@@ -92,11 +82,8 @@ async function createListing(request: Request) {
       description,
       price_per_day: pricePerDay,
       deposit,
-      status: "published",
-      // Only approved listings reach this line: a rejection returned above without
-      // writing anything. The column stays because a later human review, or a model
-      // that changes its mind, needs somewhere to say so.
-      moderation_status: "approved",
+      status: "draft",
+      moderation_status: "pending",
     })
     .select("id")
     .single();
@@ -141,7 +128,52 @@ async function createListing(request: Request) {
     return errorResponse(error);
   }
 
-  return NextResponse.json({ id: listing.id }, { status: 201 });
+  // Now the gate. The browser ran this too, at step 2, so the owner saw it coming, but
+  // that call can simply not be made, and this is the one that decides.
+  //
+  // Fails closed on purpose. A moderation step that waves listings through whenever the
+  // model is unreachable is not a moderation step, it is a delay. A listing left at
+  // pending is recoverable from the owner's own page; one waved through is not.
+  const verdict = await moderateListing({
+    title,
+    description,
+    images: await toDataUrls(images),
+  });
+
+  await applyVerdict(listing.id, owner, title, verdict);
+
+  return NextResponse.json(
+    { id: listing.id, decision: verdict.decision, reasons: verdict.reasons },
+    { status: verdict.decision === "approve" ? 201 : 422 }
+  );
+}
+
+/**
+ * Records what the checker decided and tells the owner.
+ *
+ * Shared with the resubmit route so a listing checked twice cannot end up following two
+ * slightly different rules about what approved means.
+ */
+export async function applyVerdict(
+  listingId: string,
+  owner: string,
+  title: string,
+  verdict: { decision: "approve" | "reject"; reasons: string[] }
+) {
+  const approved = verdict.decision === "approve";
+
+  await getSupabaseAdmin()
+    .from("listings")
+    .update({
+      status: approved ? "published" : "draft",
+      moderation_status: approved ? "approved" : "rejected",
+      // Kept even when approved, cleared to null, so a listing that was rejected and then
+      // fixed does not carry the old complaint around forever.
+      moderation_reason: approved ? null : verdict.reasons.join(" "),
+    })
+    .eq("id", listingId);
+
+  await notifyListingVerdict(owner, listingId, title, verdict);
 }
 
 type Incoming = {
@@ -154,7 +186,18 @@ type Incoming = {
 };
 
 /** Same rules as lib/listing.ts, and the same rules as the database constraints. */
-function firstProblem(input: Incoming): string | null {
+export function firstProblem(input: Incoming): string | null {
+  return firstTextProblem(input) ?? firstPhotoProblem(input.images);
+}
+
+/**
+ * Everything about a listing except its photographs.
+ *
+ * Split out because editing a rejected listing changes only the words: the stored photos
+ * are reused as they are. The alternative was handing the full validator an array of fake
+ * files to satisfy a count it did not need to check, which typechecks and then throws.
+ */
+export function firstTextProblem(input: Omit<Incoming, "images">): string | null {
   if (!CATEGORIES.includes(input.category as Category)) return "Unknown category.";
   if (!input.title) return "A title is required.";
   if (input.title.length > MAX_TITLE_LENGTH) return "Title is too long.";
@@ -168,10 +211,14 @@ function firstProblem(input: Incoming): string | null {
   if (!Number.isFinite(input.deposit) || input.deposit < 0) {
     return "Deposit cannot be negative.";
   }
-  if (input.images.length !== IMAGES_PER_LISTING) {
+  return null;
+}
+
+function firstPhotoProblem(images: File[]): string | null {
+  if (images.length !== IMAGES_PER_LISTING) {
     return `Exactly ${IMAGES_PER_LISTING} photos are required.`;
   }
-  for (const file of input.images) {
+  for (const file of images) {
     if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
       return "Photos must be JPG, PNG or WebP.";
     }

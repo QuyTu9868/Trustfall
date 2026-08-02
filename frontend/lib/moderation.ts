@@ -80,6 +80,9 @@ Use an empty reasons array when approving. Never reject without at least one rea
  */
 const RETRY_DELAYS_MS = [12_000, 25_000, 40_000];
 
+/** However long the provider asks for, nothing waits longer than this in one go. */
+const MAX_WAIT_MS = 45_000;
+
 /**
  * Whether the check is switched off for local development.
  *
@@ -124,9 +127,13 @@ export async function moderateListing(input: {
           "The listing checker is busy. Wait a minute and publish again."
         );
       }
-      // Groq says how long to wait. Its own number beats a guess, and ignoring it is how
-      // a retry turns into a second rate limit.
-      const wait = error.retryAfterMs ?? RETRY_DELAYS_MS[attempt];
+      // Groq says how long to wait and its number beats a guess, but only up to a point.
+      // Taking it on trust meant a publish that sat there for a quarter of an hour when
+      // the account was well over its allowance, with the browser showing a spinner and
+      // nothing to say why. Past a minute it is better to give up and let somebody press
+      // the button again than to hold a request open indefinitely.
+      const suggested = error.retryAfterMs ?? RETRY_DELAYS_MS[attempt];
+      const wait = Math.min(suggested, MAX_WAIT_MS);
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
@@ -168,15 +175,22 @@ Description: ${input.description}
         // different verdict has no idea what the rules are.
         temperature: 0,
         response_format: { type: "json_object" },
-        // This number is charged whether it is used or not. Groq counts the reservation
-        // against the per minute allowance, so 4096 made a two photo listing ask for 9048
-        // tokens against a limit of 8000 and it was refused outright, every time, with no
-        // retry that could ever succeed. Measured need is around 1200, so 2048 leaves
-        // room to think and still fits.
+        // Squeezed between two failures, and both were met on the way to this number.
         //
-        // Too low is its own failure: the model spends the budget reasoning, emits
-        // nothing, and Groq rejects the request with an error naming JSON validation.
-        max_completion_tokens: 2048,
+        // Too high and the request is refused before it runs: this reservation is charged
+        // against the per minute allowance whether it is spent or not, and Groq sizes the
+        // photos generously when it checks. 4096 asked for 9048 against a limit of 8000,
+        // 3584 asked for 8535. Neither could ever succeed, however many times it retried.
+        //
+        // Too low and the model spends the budget reasoning, emits nothing at all, and
+        // the request comes back with an error naming JSON validation. 2048 was enough for
+        // blank test images and not for real photographs, which give it far more to think
+        // about, and 2560 was still not enough with the full policy in front of it.
+        //
+        // 3000 is therefore near the ceiling rather than a comfortable middle. On the free
+        // tier a two photo listing barely fits at all, and the room to move is in the
+        // policy above: every line of it is read and reasoned about on every listing.
+        max_completion_tokens: 3000,
         // Keeps the reasoning out of the reply. Measured: it saves no tokens, because the
         // model still does the thinking either way. readVerdict copes with it present
         // regardless, since a provider that quietly stops honouring this must not open

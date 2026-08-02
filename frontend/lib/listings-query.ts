@@ -48,6 +48,7 @@ export async function fetchListings({
       count: "exact",
     })
     .eq("status", "published")
+    .eq("moderation_status", "approved")
     .order("created_at", { ascending: false })
     .range(from, from + PAGE_SIZE - 1);
 
@@ -79,6 +80,7 @@ export async function fetchListing(id: string): Promise<ListingDetail | null> {
     )
     .eq("id", id)
     .eq("status", "published")
+    .eq("moderation_status", "approved")
     .maybeSingle();
 
   if (error) throw new Error(error.message);
@@ -97,7 +99,8 @@ export async function fetchCategoryCounts() {
   // Same exclusion as the grid. A filter button reading "Vehicles 4" that opens onto three
   // cards is a worse bug than the one it came from, because now two screens disagree.
   const rentedOut = await rentedOutListingIds();
-  let query = supabase.from("listings").select("category").eq("status", "published");
+  let query = supabase.from("listings").select("category").eq("status", "published")
+    .eq("moderation_status", "approved");
   if (rentedOut.size > 0) query = query.not("id", "in", `(${[...rentedOut].join(",")})`);
 
   const { data, error } = await query;
@@ -122,7 +125,8 @@ export async function fetchPriceHint(category: Category) {
     .from("listings")
     .select("price_per_day")
     .eq("category", category)
-    .eq("status", "published");
+    .eq("status", "published")
+    .eq("moderation_status", "approved");
   if (error) throw new Error(error.message);
 
   const prices = (data ?? []).map((row) => Number(row.price_per_day)).sort((a, b) => a - b);

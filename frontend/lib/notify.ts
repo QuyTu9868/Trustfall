@@ -57,3 +57,40 @@ export async function notify(
   );
   if (error) console.error("Could not write the notification:", error.message);
 }
+
+/**
+ * Tells an owner what happened to a listing they submitted.
+ *
+ * Separate from the rental notifications above because the two are keyed on different
+ * things and carry different news. This one exists at all because a listing is now saved
+ * before it is checked, so the verdict can land after the page that asked for it has been
+ * refreshed away.
+ *
+ * The reason is the message. CLAUDE.md section 9 is explicit that a rejection which only
+ * says "rejected" loses the owner, and that is doubly true in a bell where there is no
+ * form underneath to explain it.
+ */
+export async function notifyListingVerdict(
+  owner: string,
+  listingId: string,
+  title: string,
+  verdict: { decision: "approve" | "reject"; reasons: string[] }
+) {
+  const approved = verdict.decision === "approve";
+  const body = approved
+    ? `"${title}" passed the check and is live.`
+    : `"${title}" was not accepted. ${verdict.reasons.join(" ")}`;
+
+  const { error } = await getSupabaseAdmin().from("notifications").upsert(
+    {
+      recipient_address: owner,
+      kind: approved ? "listing-approved" : "listing-rejected",
+      listing_id: listingId,
+      body,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    },
+    { onConflict: "recipient_address,kind,listing_id" }
+  );
+  if (error) console.error("Could not write the listing notification:", error.message);
+}

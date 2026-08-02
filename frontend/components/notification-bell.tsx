@@ -12,6 +12,7 @@ type Notification = {
   is_read: boolean;
   created_at: string;
   onchain_rental_id: number | null;
+  listing_id: string | null;
 };
 
 const POLL_MS = 15000;
@@ -103,7 +104,10 @@ export function NotificationBell() {
             {items.map((item) => (
               <Link
                 key={item.id}
-                href="/rentals"
+                // News about a listing belongs on the listings page, not the rentals one.
+                // A notification that opens somewhere unrelated is a notification people
+                // stop opening.
+                href={item.listing_id ? "/listings/mine" : "/rentals"}
                 onClick={() => setOpen(false)}
                 className="flex flex-col gap-1 p-3 text-sm"
               >

@@ -1,7 +1,8 @@
 "use client";
 
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -29,9 +30,29 @@ import { downscale } from "@/lib/downscale";
  */
 type Step = 1 | 2 | 3;
 
+/**
+ * The flow reads ?edit= to tell writing a new listing from fixing an existing one, and
+ * useSearchParams forces whatever contains it to render on the client. Without this
+ * boundary the build fails trying to prerender the page, so the wrapper is here to hold
+ * the line between the static shell and the part that has to wait for the URL.
+ */
 export default function ListPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-ink-muted">Loading...</p>}>
+      <ListFlow />
+    </Suspense>
+  );
+}
+
+function ListFlow() {
   const { authenticated, login } = usePrivy();
   const { identityToken } = useIdentityToken();
+
+  // Editing a listing that already exists rather than writing a new one. Same three steps
+  // and the same fields, because a second form that drifts from the first is how the two
+  // start disagreeing about what a valid listing is.
+  const editId = useSearchParams().get("edit");
+  const [loadingDraft, setLoadingDraft] = useState(Boolean(editId));
 
   const [step, setStep] = useState<Step>(1);
   const [draft, setDraft] = useState<ListingDraft>(emptyDraft);
@@ -41,6 +62,46 @@ export default function ListPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
   const [moderation, setModeration] = useState<Moderation>({ state: "idle" });
+
+  // Photos stay as they are when editing. A rejection nearly always names something in
+  // the words, and making somebody re-upload two files to fix a sentence is how they give
+  // up instead. Wrong photos are handled by deleting the listing and starting again.
+  useEffect(() => {
+    if (!editId || !authenticated) return;
+    let active = true;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/listings/mine");
+        if (!response.ok) return;
+        const result = await response.json();
+        const found = (result.listings as { id: string }[]).find((row) => row.id === editId) as
+          | {
+              category: string;
+              title: string;
+              description: string;
+              price_per_day: string;
+              deposit: string;
+            }
+          | undefined;
+        if (!found || !active) return;
+
+        setDraft({
+          category: found.category as Category,
+          title: found.title,
+          description: found.description,
+          pricePerDay: String(Number(found.price_per_day)),
+          deposit: String(Number(found.deposit)),
+        });
+      } finally {
+        if (active) setLoadingDraft(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [editId, authenticated]);
 
   // Previews are local object URLs, so nothing is uploaded until Publish. Abandon the
   // flow at step 2 and no orphan files are left in storage.
@@ -59,6 +120,10 @@ export default function ListPage() {
 
   if (publishedId) {
     return <PublishedListing id={publishedId} onAnother={() => resetAll()} />;
+  }
+
+  if (loadingDraft) {
+    return <p className="text-sm text-ink-muted">Loading the listing...</p>;
   }
 
   function resetAll() {
@@ -114,6 +179,13 @@ export default function ListPage() {
    * one that actually stops anything.
    */
   async function checkThenReview() {
+    // Editing keeps the stored photos, so there is nothing to validate and nothing to send
+    // for a preview: the real check runs on save, against those same pictures.
+    if (editId) {
+      setStep(3);
+      return;
+    }
+
     const problem = validateImages(files);
     setErrors({ images: problem ?? undefined });
     if (problem) return;
@@ -176,8 +248,8 @@ export default function ListPage() {
       // browser that refuses the cookie, which is why it is optional rather than a
       // precondition: blocking on the hook here is what produced a "try again in a
       // moment" message for a problem that no amount of waiting could fix.
-      const response = await fetch("/api/listings", {
-        method: "POST",
+      const response = await fetch(editId ? `/api/listings/${editId}` : "/api/listings", {
+        method: editId ? "PATCH" : "POST",
         headers: identityToken ? { "privy-id-token": identityToken } : undefined,
         body,
       });
@@ -186,6 +258,9 @@ export default function ListPage() {
       // The publish route runs the same check. It can disagree with step 2 when the draft
       // changed after it passed, so the reasons are shown the same way here rather than
       // flattened into a one line error that says nothing actionable.
+      // Saved either way. A rejection now leaves a real listing sitting at "not accepted"
+      // on the owner's own page rather than a draft that vanishes with the tab, so this
+      // says what changed and where it went.
       if (response.status === 422) {
         setModeration({ state: "reject", reasons: result.reasons ?? [] });
         setStep(2);

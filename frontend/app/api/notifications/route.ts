@@ -68,7 +68,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await getSupabaseAdmin()
       .from("notifications")
-      .select("id, kind, body, is_read, created_at, onchain_rental_id")
+      .select("id, kind, body, is_read, created_at, onchain_rental_id, listing_id")
       .eq("recipient_address", caller)
       .order("created_at", { ascending: false })
       .limit(30);
