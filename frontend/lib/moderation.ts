@@ -1,4 +1,5 @@
 import "server-only";
+import { targetChain } from "./chain";
 
 /**
  * The listing moderator.
@@ -65,7 +66,69 @@ Answer with JSON only:
 to change"]}
 Use an empty reasons array when approving. Never reject without at least one reason.`;
 
+/**
+ * How long to keep trying when the account is out of tokens for the minute.
+ *
+ * Groq's free tier allows 8000 tokens a minute. A photo costs about 1800 whatever its
+ * resolution - measured, the same picture at 1187px and at 224px cost exactly the same -
+ * so a two photo listing runs to roughly 5000 and only one of them fits in a minute.
+ * Shrinking images does nothing for this, which is why the answer is patience rather than
+ * compression.
+ *
+ * Waiting is honest here: publishing already involves a wait, and a few extra seconds is
+ * better than telling somebody their listing failed when nothing was wrong with it.
+ */
+const RETRY_DELAYS_MS = [12_000, 25_000, 40_000];
+
+/**
+ * Whether the check is switched off for local development.
+ *
+ * Two conditions, and the second is the one that matters. The environment variable alone
+ * would be one careless deploy away from a marketplace with no moderation at all, so it
+ * is only honoured on the local Hardhat chain. On Sepolia this returns false no matter
+ * what anybody puts in the environment.
+ *
+ * Deliberately not driven by anything the browser sends. A bypass a client can ask for is
+ * not a bypass, it is the absence of a gate.
+ */
+export function moderationBypassed() {
+  return targetChain.id === 31337 && process.env.MODERATION_BYPASS === "1";
+}
+
 export async function moderateListing(input: {
+  title: string;
+  description: string;
+  images: string[];
+}): Promise<Verdict> {
+  if (moderationBypassed()) return { decision: "approve", reasons: [] };
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await askModel(input);
+    } catch (error) {
+      const outOfTokens = error instanceof RateLimited;
+      if (!outOfTokens) throw error;
+      if (attempt >= RETRY_DELAYS_MS.length) {
+        throw new ModerationUnavailable(
+          "The listing checker is busy. Wait a minute and publish again."
+        );
+      }
+      // Groq says how long to wait. Its own number beats a guess, and ignoring it is how
+      // a retry turns into a second rate limit.
+      const wait = error.retryAfterMs ?? RETRY_DELAYS_MS[attempt];
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+}
+
+/** Thrown only inside this file, so a busy minute never reaches a route as a failure. */
+class RateLimited extends Error {
+  constructor(readonly retryAfterMs: number | null) {
+    super("rate limited");
+  }
+}
+
+async function askModel(input: {
   title: string;
   description: string;
   images: string[];
@@ -94,12 +157,15 @@ Description: ${input.description}
         // different verdict has no idea what the rules are.
         temperature: 0,
         response_format: { type: "json_object" },
-        // Room to think and still have room left to answer. Measured: qwen spends about
-        // 1200 tokens reasoning about a short listing, and when the budget runs out mid
-        // thought it emits nothing at all. Groq then rejects the whole request with a 400
-        // rather than returning bad JSON, so an unset budget is a listing that cannot be
-        // published for reasons nobody can see.
-        max_completion_tokens: 4096,
+        // This number is charged whether it is used or not. Groq counts the reservation
+        // against the per minute allowance, so 4096 made a two photo listing ask for 9048
+        // tokens against a limit of 8000 and it was refused outright, every time, with no
+        // retry that could ever succeed. Measured need is around 1200, so 2048 leaves
+        // room to think and still fits.
+        //
+        // Too low is its own failure: the model spends the budget reasoning, emits
+        // nothing, and Groq rejects the request with an error naming JSON validation.
+        max_completion_tokens: 2048,
         // Keeps the reasoning out of the reply. Measured: it saves no tokens, because the
         // model still does the thinking either way. readVerdict copes with it present
         // regardless, since a provider that quietly stops honouring this must not open
@@ -126,14 +192,30 @@ Description: ${input.description}
     throw new ModerationUnavailable("Could not reach the listing checker. Try again in a moment.");
   }
 
-  // Its own case, because it is the one failure here that is nobody's fault and fixes
-  // itself. Groq's free tier allows 8000 tokens a minute and one check costs around 1200,
-  // so roughly six listings a minute before this starts. Telling an owner the checker is
-  // broken when it is merely busy sends them off to rewrite a listing that was fine.
+  // Not an error yet. The caller waits and asks again, and only gives up after several
+  // tries. Telling an owner their listing failed when the account merely ran out of
+  // tokens for the minute sends them off to rewrite something that was never wrong.
+  // Over capacity on Groq's side. Nothing to do with this listing and it passes, so it
+  // waits alongside the rate limit rather than being reported as a refusal.
+  if (response.status === 503) {
+    throw new RateLimited(null);
+  }
+
   if (response.status === 429) {
-    throw new ModerationUnavailable(
-      "The listing checker is busy right now. Wait a few seconds and publish again."
-    );
+    const body = await response.text();
+
+    // Two different things share this status. Being out of tokens for the minute clears
+    // by itself. A single request larger than the whole minute's allowance never clears,
+    // and retrying it just wastes the caller's time before failing anyway.
+    if (body.includes("Request too large")) {
+      throw new ModerationUnavailable(
+        "This listing is too large for the checker's current plan. Use fewer or smaller photos."
+      );
+    }
+
+    const header = response.headers.get("retry-after");
+    const seconds = header ? Number(header) : NaN;
+    throw new RateLimited(Number.isFinite(seconds) ? seconds * 1000 : null);
   }
 
   if (!response.ok) {

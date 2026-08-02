@@ -208,21 +208,45 @@ const INJECTION = {
  * has to pace itself or it dies two thirds of the way through with a rate limit. Slower
  * than it needs to be on a paid tier, and worth it for a suite that finishes.
  */
-const PACE_MS = 11_000;
+/**
+ * Text only listings cost about 300 tokens of prompt plus the 2048 the reply is allowed
+ * to use, and that reservation is charged whether it is spent or not. Three a minute fit
+ * inside the free tier's 8000, so they are spaced accordingly.
+ *
+ * The photo cases at the end are paced separately. Two photos come to roughly 7000 with
+ * the reservation, which is one request per minute and no more.
+ */
+const PACE_MS = 22_000;
+const PHOTO_PACE_MS = 70_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** One check, waiting out a rate limit rather than failing the case over it. */
+/**
+ * A tiny image, sent as two photos with every listing.
+ *
+ * Not decoration. A photo costs about 1800 tokens whatever its resolution, measured: the
+ * same picture at 1187px and at 224px came to exactly the same number. So a real publish
+ * costs roughly 5000 tokens, not the 1250 a text only check does, and a suite that skips
+ * the photos measures a request the product never makes.
+ *
+ * Blank rather than a real photograph because what is being tested here is the policy and
+ * the plumbing, and an empty image gives the model nothing to disagree about.
+ */
+// Eight pixels square. One pixel is refused outright: the model wants at least two in
+// each dimension, which is the sort of thing only a real call tells you.
+const BLANK_PHOTO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFUlEQVR4nGM8ceIEAzbAhFV00EoAANcnAmjjOKqVAAAAAElFTkSuQmCC";
+
+/**
+ * The policy cases run without photos.
+ *
+ * Not a shortcut around the real shape of a request: two blank images tell the model
+ * nothing about whether a description offers a weapon, and they cost enough that the
+ * twelve of them would take a quarter of an hour on the free tier. A suite that long is a
+ * suite nobody runs. The photo path gets its own two cases below, where it is the thing
+ * being tested rather than dead weight.
+ */
 async function moderatePaced(input: { title: string; description: string }) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await moderateListing({ ...input, images: [] });
-    } catch (error) {
-      const busy = error instanceof ModerationUnavailable && /busy/.test(error.message);
-      if (!busy || attempt >= 2) throw error;
-      console.log("        (rate limited, waiting)");
-      await sleep(30_000);
-    }
-  }
+  return moderateListing({ ...input, images: [] });
 }
 
 async function main() {
@@ -302,6 +326,35 @@ async function main() {
     "  a listing ordering its own approval does not get it",
     injected.decision === "reject",
     injected.reasons.join(" | ")
+  );
+
+  // The shape a real publish actually sends. This is the case that catches a completion
+  // reservation set too high: two photos plus the reply allowance has to fit inside one
+  // minute's allowance, and when it does not the request is refused outright with no
+  // retry that could ever succeed.
+  console.log("\n  With the two photos a real listing carries");
+  await sleep(PHOTO_PACE_MS);
+  const cleanWithPhotos = await moderateListing({
+    title: LISTINGS[0].title,
+    description: LISTINGS[0].description,
+    images: [BLANK_PHOTO, BLANK_PHOTO],
+  });
+  check(
+    "  a clean listing with photos is approved",
+    cleanWithPhotos.decision === "approve",
+    cleanWithPhotos.reasons.join(" | ")
+  );
+
+  await sleep(PHOTO_PACE_MS);
+  const dirtyWithPhotos = await moderateListing({
+    title: LISTINGS[6].title,
+    description: LISTINGS[6].description,
+    images: [BLANK_PHOTO, BLANK_PHOTO],
+  });
+  check(
+    "  a firearm listing with photos is rejected",
+    dirtyWithPhotos.decision === "reject",
+    dirtyWithPhotos.reasons.join(" | ")
   );
 
   console.log(

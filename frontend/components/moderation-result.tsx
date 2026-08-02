@@ -4,6 +4,7 @@ export type Moderation =
   | { state: "idle" }
   | { state: "checking" }
   | { state: "approve" }
+  | { state: "bypassed" }
   | { state: "reject"; reasons: string[] }
   | { state: "unavailable"; message: string };
 
@@ -29,6 +30,17 @@ export function ModerationResult({ result }: { result: Moderation }) {
     return (
       <p className="rounded-card border border-line bg-live-bg px-4 py-3 text-sm text-live-ink">
         Checked and clear. You can publish this.
+      </p>
+    );
+  }
+
+  // Loud on purpose, and a different colour from a pass. Somebody demoing with the check
+  // switched off should find that out here rather than afterwards.
+  if (result.state === "bypassed") {
+    return (
+      <p className="rounded-card border border-line bg-pend-bg px-4 py-3 text-sm text-pend-ink">
+        The listing check is switched off on this local chain. Nothing was checked. Unset
+        MODERATION_BYPASS to turn it back on.
       </p>
     );
   }

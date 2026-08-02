@@ -1,4 +1,5 @@
 import { CATEGORIES, type Category } from "./listing";
+import { rentedOutListingIds } from "./rental-server";
 import { getSupabase } from "./supabase";
 
 /**
@@ -52,6 +53,12 @@ export async function fetchListings({
 
   if (category) query = query.eq("category", category);
 
+  // Excluded in the query rather than filtered out of the results. Dropping rows after
+  // the fact would leave a page of six showing four, and the exact count behind the page
+  // numbers would be counting things nobody can see.
+  const rentedOut = await rentedOutListingIds();
+  if (rentedOut.size > 0) query = query.not("id", "in", `(${[...rentedOut].join(",")})`);
+
   const { data, error, count } = await query;
   if (error) throw new Error(error.message);
 
@@ -86,10 +93,14 @@ export async function fetchListing(id: string): Promise<ListingDetail | null> {
 /** Counts per category, for the filter row to show how much is behind each button. */
 export async function fetchCategoryCounts() {
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("listings")
-    .select("category")
-    .eq("status", "published");
+
+  // Same exclusion as the grid. A filter button reading "Vehicles 4" that opens onto three
+  // cards is a worse bug than the one it came from, because now two screens disagree.
+  const rentedOut = await rentedOutListingIds();
+  let query = supabase.from("listings").select("category").eq("status", "published");
+  if (rentedOut.size > 0) query = query.not("id", "in", `(${[...rentedOut].join(",")})`);
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
 
   const counts: Record<string, number> = {};

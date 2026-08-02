@@ -487,6 +487,66 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   quát hơn: số nào contract quyết thì đọc từ contract, đừng tính lại ở frontend.
 - **Skill đích:** `vibe-code-dapp`
 
+### [2026-08-02] Bọc try/catch im lặng quanh một lời gọi, rồi lỗi thật nằm im trong đó
+
+- **Chuyện gì xảy ra:** Viết hàm đọc chain để ẩn món đang cho thuê, bọc `try/catch` với
+  chú thích "chain chết thì thà hiện thừa còn hơn vỡ trang". Chạy thử thì kết quả rỗng.
+  Nguyên nhân thật: **chain local không có contract Multicall3**, nên `multicall` ném lỗi
+  ngay lần gọi đầu. Cái catch nuốt sạch, và triệu chứng là "không có món nào đang thuê",
+  tức là **giống hệt lúc chạy đúng mà chưa ai thuê gì**.
+- **Sai ở đâu:** Chọn giá trị fallback trùng với một trạng thái hợp lệ. Khi lỗi và khi
+  bình thường ra cùng một kết quả thì không có cách nào phân biệt từ bên ngoài. Chú thích
+  còn khiến nó trông như một quyết định chín chắn.
+- **Luật rút ra:** `catch` nuốt lỗi thì **bắt buộc phải log**, kể cả khi đã có phương án
+  dự phòng. Và khi giá trị dự phòng trùng với một trạng thái bình thường thì phải kiểm
+  bằng một ca có dữ liệu thật, không được kiểm bằng ca rỗng. Kèm theo: `multicall` cần
+  Multicall3 tồn tại trên chain, node Hardhat mới dựng thì không có, nên dùng nhiều lời
+  gọi song song để một đường code chạy được cả local lẫn testnet.
+- **Skill đích:** `vibe-code-dapp`
+
+### [2026-08-02] Sửa một giới hạn bằng cách nâng nó lên, và tạo ra lỗi không bao giờ hết
+
+- **Chuyện gì xảy ra:** Model nghĩ hết ngân sách token đầu ra rồi trả rỗng, nhà cung cấp
+  từ chối request kèm lỗi nói về JSON. Sửa bằng cách nâng `max_completion_tokens` lên
+  4096. Nhưng nhà cung cấp **tính cả phần dự trữ đó vào hạn mức mỗi phút**, dùng hay không
+  cũng tính. Kết quả: tin có 2 ảnh đòi 9048 token trong khi trần cả phút là 8000, tức là
+  **không phút nào vừa**. Thử lại vô nghĩa, mà triệu chứng thì giống hệt "tạm hết token".
+- **Sai ở đâu:** Chỉnh một con số để thoát lỗi trước mắt mà không hỏi con số đó còn nằm
+  trong ràng buộc nào khác. Hai giới hạn kéo ngược chiều nhau: đặt thấp thì model nghĩ
+  chưa xong đã hết chỗ, đặt cao thì cả request vượt trần phút.
+- **Luật rút ra:** Trước khi nâng một hạn mức, liệt kê **mọi ràng buộc con số đó tham
+  gia**, không chỉ cái đang báo lỗi. Và phân biệt hai loại cạn tài nguyên: loại tự hết
+  sau một lúc thì chờ rồi thử lại, loại vượt trần tuyệt đối thì thử lại là vô ích và phải
+  báo đúng nguyên nhân. Hiện ra như nhau nhưng cách xử ngược nhau.
+- **Skill đích:** `agentic-engineering`
+
+### [2026-08-02] Đo chi phí trên một hình dạng request mà sản phẩm không bao giờ gửi
+
+- **Chuyện gì xảy ra:** Bộ test kiểm duyệt chạy tin **không ảnh**, đo ra 1250 token mỗi
+  lần, rồi báo cáo với user là "khoảng 6 tin mỗi phút". Sản phẩm thật luôn gửi kèm 2 ảnh,
+  tốn ~7000, tức **1 tin mỗi phút**. Sai số 6 lần, và con số sai đó đã dùng để trấn an
+  user rằng giới hạn không đáng lo.
+- **Sai ở đâu:** Bỏ ảnh khỏi test cho nhanh, rồi quên rằng mình đang đo một thứ khác với
+  thứ chạy thật. Tệ hơn: đem con số đó đi kết luận về vận hành.
+- **Luật rút ra:** Số đo dùng để ra quyết định thì phải lấy từ **đúng hình dạng request
+  sản phẩm gửi**. Muốn test nhanh thì tách làm hai: phần logic chạy nhẹ, cộng ít nhất một
+  ca chạy đúng hình dạng thật để giữ cho con số trung thực.
+- **Skill đích:** `agentic-engineering`
+
+### [2026-08-02] Định tối ưu theo trực giác, may là đo trước
+
+- **Chuyện gì xảy ra:** Cần giảm token, hướng đầu tiên nghĩ tới là nén ảnh nhỏ lại. Đo
+  thử: cùng một tấm ảnh ở 1187x762, 512x329 và 224x144 đều tốn **đúng 3599 token**. Nhà
+  cung cấp tính phẳng theo số ảnh, không theo độ phân giải. Nếu làm luôn thì đã tốn một
+  buổi viết code nén ảnh mà tiết kiệm được 0 token.
+- **Sai ở đâu:** Không sai, ghi lại để làm mốc. Trực giác "ảnh to thì tốn nhiều" là hợp
+  lý và hoàn toàn sai với dịch vụ này.
+- **Luật rút ra:** Cách tính chi phí của dịch vụ ngoài phải **đo bằng một thí nghiệm có
+  đối chứng** trước khi tối ưu theo nó: đổi đúng một biến, giữ nguyên phần còn lại, so
+  con số nhà cung cấp trả về. Suy luận từ cách mình nghĩ hệ thống hoạt động không thay
+  thế được.
+- **Skill đích:** `agentic-engineering`
+
 ### [2026-08-01] Viết ca test từ tưởng tượng, bản thật khó hơn đúng chỗ quyết định
 
 - **Chuyện gì xảy ra:** Hàm đọc kết quả của model cắt từ dấu `{` đầu tới `}` cuối. Tự nghĩ

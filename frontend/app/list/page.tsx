@@ -145,7 +145,7 @@ export default function ListPage() {
         return;
       }
 
-      setModeration({ state: "approve" });
+      setModeration({ state: result.bypassed ? "bypassed" : "approve" });
       setStep(3);
     } catch {
       setModeration({ state: "unavailable", message: "The check could not be sent." });

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
-import { ModerationUnavailable, moderateListing, toDataUrls } from "@/lib/moderation";
+import {
+  ModerationUnavailable,
+  moderateListing,
+  moderationBypassed,
+  toDataUrls,
+} from "@/lib/moderation";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 
 /**
@@ -31,7 +36,9 @@ export async function POST(request: Request) {
       images: await toDataUrls(images),
     });
 
-    return NextResponse.json(verdict);
+    // Says so out loud when the check is off. A screen that reports "checked and clear"
+    // while nothing was checked is the one way this switch does real damage.
+    return NextResponse.json({ ...verdict, bypassed: moderationBypassed() });
   } catch (error) {
     if (error instanceof AuthError) return errorResponse(error, 401);
     // 503 rather than 500: the listing is fine as far as anyone knows, the checker is not
