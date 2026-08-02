@@ -1,0 +1,213 @@
+"use client";
+
+import { useIdentityToken } from "@privy-io/react-auth";
+import { useEffect, useMemo, useState } from "react";
+
+type Filed = { side: "owner" | "renter"; statement: string; created_at: string };
+type Ruling = {
+  verdict: "refund_renter" | "split" | "pay_owner";
+  confidence: number;
+  reason: string;
+  signed: boolean;
+  tx_hash: string | null;
+  held_back_reason: string | null;
+};
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/** What each outcome means for the deposit, in the words somebody losing would read. */
+const OUTCOME: Record<Ruling["verdict"], string> = {
+  refund_renter: "The whole deposit goes back to the renter.",
+  split: "The deposit is split down the middle.",
+  pay_owner: "The owner keeps the deposit.",
+};
+
+/**
+ * Filing an account of what went wrong, and reading what came of it.
+ *
+ * Both statements are shown to both people. The arbitrator sees both regardless, so hiding
+ * one from the other would only mislead whoever is reading, and arguing about somebody's
+ * deposit behind their back is not a thing worth making easy.
+ *
+ * There is no button here that runs the arbitrator. It runs when both sides have filed,
+ * or when the first has waited a day: whoever expects to lose would never press it.
+ */
+export function DisputeBox({ rentalId }: { rentalId: bigint }) {
+  const { identityToken } = useIdentityToken();
+
+  const [mine, setMine] = useState<"owner" | "renter" | null>(null);
+  const [filed, setFiled] = useState<Filed[] | null>(null);
+  const [ruling, setRuling] = useState<Ruling | null>(null);
+
+  const [statement, setStatement] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reloads, setReloads] = useState(0);
+
+  const preview = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/disputes?rentalId=${rentalId}`);
+        if (!response.ok) return;
+        const result = await response.json();
+        if (!active) return;
+        setMine(result.mine);
+        setFiled(result.evidence as Filed[]);
+        setRuling(result.verdict as Ruling | null);
+      } catch {
+        // A missed poll leaves the last answer on screen, which is better than blanking it.
+      }
+    };
+
+    void load();
+    // Slow: this only changes when somebody files, and one of the two changes is your own.
+    const timer = setInterval(load, 10000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [rentalId, reloads]);
+
+  async function file() {
+    if (!statement.trim() || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.set("rentalId", rentalId.toString());
+      body.set("statement", statement.trim());
+      if (photo) body.set("image", photo);
+
+      const response = await fetch("/api/disputes", {
+        method: "POST",
+        headers: identityToken ? { "privy-id-token": identityToken } : undefined,
+        body,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not file that.");
+      setStatement("");
+      setPhoto(null);
+      setReloads((count) => count + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not file that.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const alreadyFiled = filed?.some((entry) => entry.side === mine);
+  const waitingOnThem = filed?.length === 1 && alreadyFiled;
+
+  return (
+    <section className="flex flex-col gap-4 rounded-card border border-stop-ink/30 bg-stop-bg/40 p-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-sm">Dispute</h3>
+        <p className="text-xs text-ink-muted">
+          Both accounts go to an arbitrator, which picks one of three outcomes for the
+          deposit. It never sees an amount and never moves the money: the contract does the
+          arithmetic itself.
+        </p>
+      </div>
+
+      {filed?.map((entry) => (
+        <div key={entry.side} className="flex flex-col gap-1 rounded-card border border-line bg-surface p-3">
+          <span className="text-xs text-ink-muted">
+            The {entry.side} said, {new Date(entry.created_at).toLocaleString()}
+          </span>
+          <p className="text-sm whitespace-pre-wrap break-words">{entry.statement}</p>
+        </div>
+      ))}
+
+      {!alreadyFiled && (
+        <div className="flex flex-col gap-2">
+          <textarea
+            value={statement}
+            onChange={(event) => setStatement(event.target.value)}
+            rows={3}
+            maxLength={1500}
+            placeholder="What happened, in your words. One photo helps more than a paragraph."
+            className="rounded-control border border-line bg-surface px-3 py-2 text-sm"
+          />
+
+          {preview && (
+            <div className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={preview} alt="Your evidence" className="h-16 w-16 rounded object-cover" />
+              <button onClick={() => setPhoto(null)} className="text-xs text-ink-muted underline">
+                Remove
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="cursor-pointer rounded-control border border-line bg-surface px-3 py-2 text-sm text-ink-muted">
+              {photo ? "Change photo" : "Add a photo"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => {
+                  const chosen = event.target.files?.[0] ?? null;
+                  setError(chosen && chosen.size > MAX_IMAGE_BYTES ? "That photo is over 5MB." : null);
+                  setPhoto(chosen && chosen.size <= MAX_IMAGE_BYTES ? chosen : null);
+                }}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={file}
+              disabled={sending || statement.trim().length === 0}
+              className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white disabled:opacity-40"
+            >
+              {sending ? "Filing..." : "File this"}
+            </button>
+            <span className="text-xs text-ink-muted">You get one submission.</span>
+          </div>
+        </div>
+      )}
+
+      {waitingOnThem && !ruling && (
+        <p className="text-xs text-ink-muted">
+          Filed. Waiting for the other side. If they say nothing for a day, the arbitrator
+          rules on what it has.
+        </p>
+      )}
+
+      {ruling && (
+        <div className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-sm">{OUTCOME[ruling.verdict]}</span>
+            <span className="tabular text-xs text-ink-muted">
+              confidence {ruling.confidence.toFixed(2)}
+            </span>
+          </div>
+          <p className="text-sm text-ink-muted">{ruling.reason}</p>
+
+          {/* Whether it was acted on is a different fact from what it decided, and the
+              difference is the whole point of having a threshold. */}
+          {ruling.signed ? (
+            <span className="tabular text-[11px] text-live-ink break-all">
+              Applied on chain: {ruling.tx_hash}
+            </span>
+          ) : (
+            <span className="text-xs text-pend-ink">
+              Not applied. {ruling.held_back_reason} A human resolver decides this one, and
+              if nobody does within seven days the deposit returns to the renter.
+            </span>
+          )}
+        </div>
+      )}
+
+      {error && <p className="text-xs text-stop-ink">{error}</p>}
+    </section>
+  );
+}

@@ -1,5 +1,8 @@
 import "server-only";
 import { targetChain } from "./chain";
+import { GroqUnavailable, MODEL, askGroq } from "./groq";
+
+export { toDataUrls } from "./groq";
 
 /**
  * The listing moderator.
@@ -17,16 +20,15 @@ import { targetChain } from "./chain";
  * hazard taxonomy. It has to be written out and read, which is a thing a general model
  * does and a classifier does not.
  */
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-
-/** Production on Groq, and multimodal. Checked against their model list, not remembered. */
-const MODEL = "qwen/qwen3.6-27b";
-
 export type Verdict = {
   decision: "approve" | "reject";
   reasons: string[];
 };
 
+/**
+ * Kept as its own name because the routes map it to a 503 and the wording is aimed at
+ * somebody publishing a listing rather than at whoever is reading a log.
+ */
 export class ModerationUnavailable extends Error {}
 
 /**
@@ -67,23 +69,6 @@ to change"]}
 Use an empty reasons array when approving. Never reject without at least one reason.`;
 
 /**
- * How long to keep trying when the account is out of tokens for the minute.
- *
- * Groq's free tier allows 8000 tokens a minute. A photo costs about 1800 whatever its
- * resolution - measured, the same picture at 1187px and at 224px cost exactly the same -
- * so a two photo listing runs to roughly 5000 and only one of them fits in a minute.
- * Shrinking images does nothing for this, which is why the answer is patience rather than
- * compression.
- *
- * Waiting is honest here: publishing already involves a wait, and a few extra seconds is
- * better than telling somebody their listing failed when nothing was wrong with it.
- */
-const RETRY_DELAYS_MS = [12_000, 25_000, 40_000];
-
-/** However long the provider asks for, nothing waits longer than this in one go. */
-const MAX_WAIT_MS = 45_000;
-
-/**
  * Whether the check is switched off for local development.
  *
  * Lives on the server, in memory, for the life of the dev process. The toggle on /dev
@@ -116,155 +101,23 @@ export async function moderateListing(input: {
 }): Promise<Verdict> {
   if (moderationBypassed()) return { decision: "approve", reasons: [] };
 
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await askModel(input);
-    } catch (error) {
-      const outOfTokens = error instanceof RateLimited;
-      if (!outOfTokens) throw error;
-      if (attempt >= RETRY_DELAYS_MS.length) {
-        throw new ModerationUnavailable(
-          "The listing checker is busy. Wait a minute and publish again."
-        );
-      }
-      // Groq says how long to wait and its number beats a guess, but only up to a point.
-      // Taking it on trust meant a publish that sat there for a quarter of an hour when
-      // the account was well over its allowance, with the browser showing a spinner and
-      // nothing to say why. Past a minute it is better to give up and let somebody press
-      // the button again than to hold a request open indefinitely.
-      const suggested = error.retryAfterMs ?? RETRY_DELAYS_MS[attempt];
-      const wait = Math.min(suggested, MAX_WAIT_MS);
-      await new Promise((resolve) => setTimeout(resolve, wait));
-    }
-  }
-}
-
-/** Thrown only inside this file, so a busy minute never reaches a route as a failure. */
-class RateLimited extends Error {
-  constructor(readonly retryAfterMs: number | null) {
-    super("rate limited");
-  }
-}
-
-async function askModel(input: {
-  title: string;
-  description: string;
-  images: string[];
-}): Promise<Verdict> {
-  const key = process.env.GROQ_API_KEY;
-  if (!key) {
-    throw new ModerationUnavailable(
-      "Listings are checked before they go live and the checker is not configured. Set GROQ_API_KEY in frontend/.env.local."
-    );
-  }
-
   const untrusted = `<untrusted>
 Title: ${input.title}
 Description: ${input.description}
 </untrusted>`;
 
-  let response: Response;
   try {
-    response = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: MODEL,
-        // Zero, unlike the Playground default. The same listing submitted twice has to get
-        // the same answer, or an owner who resubmits an unchanged draft and gets a
-        // different verdict has no idea what the rules are.
-        temperature: 0,
-        response_format: { type: "json_object" },
-        // Squeezed between two failures, and both were met on the way to this number.
-        //
-        // Too high and the request is refused before it runs: this reservation is charged
-        // against the per minute allowance whether it is spent or not, and Groq sizes the
-        // photos generously when it checks. 4096 asked for 9048 against a limit of 8000,
-        // 3584 asked for 8535. Neither could ever succeed, however many times it retried.
-        //
-        // Too low and the model spends the budget reasoning, emits nothing at all, and
-        // the request comes back with an error naming JSON validation. 2048 was enough for
-        // blank test images and not for real photographs, which give it far more to think
-        // about, and 2560 was still not enough with the full policy in front of it.
-        //
-        // The window between the two is narrow enough that it had to be found by binary
-        // search against real photographs: 3000 was refused as too large at 8143, 2560 ran
-        // out of room, 2816 fits and finishes with 2018 spent. There is no comfortable
-        // middle here, and the free tier is the reason. The room to move, if it is ever
-        // needed, is in the policy above: every line of it is read and reasoned about on
-        // every single listing.
-        max_completion_tokens: 2816,
-        // Keeps the reasoning out of the reply. Measured: it saves no tokens, because the
-        // model still does the thinking either way. readVerdict copes with it present
-        // regardless, since a provider that quietly stops honouring this must not open
-        // the gate.
-        //
-        // reasoning_effort is deliberately left at its default. Setting it to "none" makes
-        // a call ten times cheaper and seven times faster, and it rejected an ordinary
-        // scooter listing in testing. A false rejection turns an honest owner away at the
-        // door, which costs more than the tokens ever will.
-        reasoning_format: "hidden",
-        messages: [
-          { role: "system", content: POLICY },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: untrusted },
-              ...input.images.map((url) => ({ type: "image_url", image_url: { url } })),
-            ],
-          },
-        ],
-      }),
-    });
-  } catch {
-    throw new ModerationUnavailable("Could not reach the listing checker. Try again in a moment.");
+    return readVerdict(await askGroq({ system: POLICY, text: untrusted, images: input.images }));
+  } catch (error) {
+    // Reworded for the person publishing. They do not care which provider is busy, only
+    // whether to rewrite their listing or wait.
+    if (error instanceof GroqUnavailable) throw new ModerationUnavailable(error.message);
+    throw error;
   }
-
-  // Not an error yet. The caller waits and asks again, and only gives up after several
-  // tries. Telling an owner their listing failed when the account merely ran out of
-  // tokens for the minute sends them off to rewrite something that was never wrong.
-  // Over capacity on Groq's side. Nothing to do with this listing and it passes, so it
-  // waits alongside the rate limit rather than being reported as a refusal.
-  if (response.status === 503) {
-    throw new RateLimited(null);
-  }
-
-  if (response.status === 429) {
-    const body = await response.text();
-
-    // Two different things share this status. Being out of tokens for the minute clears
-    // by itself. A single request larger than the whole minute's allowance never clears,
-    // and retrying it just wastes the caller's time before failing anyway.
-    if (body.includes("Request too large")) {
-      throw new ModerationUnavailable(
-        "This listing is too large for the checker's current plan. Use fewer or smaller photos."
-      );
-    }
-
-    const header = response.headers.get("retry-after");
-    const seconds = header ? Number(header) : NaN;
-    throw new RateLimited(Number.isFinite(seconds) ? seconds * 1000 : null);
-  }
-
-  if (!response.ok) {
-    const detail = await response.text();
-    // The model ran out of room and returned nothing. Worth its own sentence because the
-    // raw error names JSON validation, which sends whoever reads it looking for a bug in
-    // the format rather than at the token budget.
-    if (detail.includes("json_validate_failed")) {
-      throw new ModerationUnavailable(
-        "The checker ran out of room before it answered. Shorten the description and try again."
-      );
-    }
-    throw new ModerationUnavailable(
-      `The listing checker refused the request: ${detail.slice(0, 200)}`
-    );
-  }
-
-  const result = await response.json();
-  const answer: string = result.choices?.[0]?.message?.content ?? "";
-  return readVerdict(answer);
 }
+
+/** Named so the admin log can record which model reached a verdict. */
+export const MODERATION_MODEL = MODEL;
 
 /**
  * Turns whatever came back into a decision.
@@ -350,12 +203,3 @@ function balancedObjects(text: string): string[] {
   return found;
 }
 
-/** Files as data URLs, which is how both Groq and the browser want to see an image. */
-export async function toDataUrls(files: File[]) {
-  return Promise.all(
-    files.map(async (file) => {
-      const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-      return `data:${file.type};base64,${base64}`;
-    })
-  );
-}

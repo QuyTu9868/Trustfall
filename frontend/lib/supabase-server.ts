@@ -17,6 +17,10 @@ export const LISTING_IMAGE_BUCKET = "listing-images";
 // seen by strangers; a photo of a scratch sent to one person is not.
 export const CHAT_IMAGE_BUCKET = "chat-images";
 
+// Private, like the chat. A photograph submitted as evidence in a disagreement about
+// money is the last thing that should be readable by anyone who guesses a URL.
+export const DISPUTE_EVIDENCE_BUCKET = "dispute-evidence";
+
 export function getSupabaseAdmin() {
   if (!url || !serviceRoleKey) {
     throw new Error(

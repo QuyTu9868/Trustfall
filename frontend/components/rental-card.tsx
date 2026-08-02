@@ -7,6 +7,7 @@ import { useAccount, useConfig } from "wagmi";
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { ChatThread } from "@/components/chat-thread";
 import { DepositCountdown } from "@/components/deposit-countdown";
+import { DisputeBox } from "@/components/dispute-box";
 import { ShowHandoverCode } from "@/components/handover-code";
 import { ReviewBox } from "@/components/review-box";
 import { RoleTag } from "@/components/role-tag";
@@ -305,6 +306,8 @@ export function RentalCard({
           }}
         />
       )}
+
+      {rental.status === "Disputed" && <DisputeBox rentalId={rental.id} />}
 
       {chatOpen && <ChatThread rentalId={rental.id} />}
 

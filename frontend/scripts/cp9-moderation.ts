@@ -216,7 +216,7 @@ const INJECTION = {
  * The photo cases at the end are paced separately. Two photos come to roughly 7000 with
  * the reservation, which is one request per minute and no more.
  */
-const PACE_MS = 22_000;
+const PACE_MS = 28_000;
 const PHOTO_PACE_MS = 70_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

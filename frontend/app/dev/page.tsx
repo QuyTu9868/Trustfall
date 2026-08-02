@@ -183,8 +183,13 @@ export default function DevPage() {
 }
 
 /**
- * Pushes the local chain's clock forward three days, so the deposit release can be tested
- * without waiting three real ones.
+ * Pushes the local chain's clock forward, so the two waiting periods can be tested without
+ * living through them.
+ *
+ * Three days is the dispute window: after a return, that is how long the owner has to
+ * complain before the deposit can be released. Seven is the verdict window: once a dispute
+ * is open, that is how long the arbitrator and the human resolver have before the deposit
+ * goes back to the renter by default.
  *
  * Local only, and the check is on the chain id rather than NODE_ENV: this talks straight
  * to the Hardhat RPC, and there is nothing to be gained by rendering a button that a real
@@ -195,13 +200,13 @@ function TimeTravel() {
 
   if (targetChain.id !== 31337) return null;
 
-  async function skip() {
+  async function skip(days: number) {
     setState("working");
     try {
       // evm_increaseTime only takes effect on the next block, so mine one straight after.
       // Without it the chain agrees to the new time but no contract has seen it yet.
       for (const [method, params] of [
-        ["evm_increaseTime", [3 * 24 * 60 * 60]],
+        ["evm_increaseTime", [days * 24 * 60 * 60]],
         ["evm_mine", []],
       ] as const) {
         const response = await fetch(localRpcUrl, {
@@ -220,20 +225,31 @@ function TimeTravel() {
 
   return (
     <section className="flex max-w-xl flex-col gap-3 rounded-card border border-line bg-surface p-4">
-      <h2 className="text-sm">Skip the dispute window</h2>
+      <h2 className="text-sm">Skip a waiting period</h2>
       <p className="text-xs text-ink-muted">
-        Moves the local chain forward 3 days so a returned rental can be finalised now.
+        Three days is the window to complain after a return. Seven is how long a dispute
+        has before the deposit goes back to the renter by default.
       </p>
-      <button
-        onClick={skip}
-        disabled={state === "working"}
-        className="w-fit rounded-control border border-line px-4 py-2 text-sm disabled:opacity-50"
-      >
-        {state === "working" ? "Skipping..." : "Skip 3 days"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => skip(3)}
+          disabled={state === "working"}
+          className="w-fit rounded-control border border-line px-4 py-2 text-sm disabled:opacity-50"
+        >
+          Skip 3 days
+        </button>
+        <button
+          onClick={() => skip(7)}
+          disabled={state === "working"}
+          className="w-fit rounded-control border border-line px-4 py-2 text-sm disabled:opacity-50"
+        >
+          Skip 7 days
+        </button>
+      </div>
+      {state === "working" && <p className="text-xs text-ink-muted">Skipping...</p>}
       {state === "done" && (
         <p className="text-xs text-ink-muted">
-          Done. Reload the rentals page to see the countdown at zero.
+          Done. The countdowns follow the chain clock, so they move on their own.
         </p>
       )}
       {state === "failed" && (
@@ -242,11 +258,10 @@ function TimeTravel() {
           running?
         </p>
       )}
-      {/* Learned the hard way: the chain clock only goes forward, and permit deadlines are
-          signed against the browser's clock. Once they disagree, every permit looks expired. */}
+      {/* Renting still works afterwards now that permits are dated from the chain, but the
+          clock itself only ever goes forward. */}
       <p className="text-xs text-ink-muted">
-        One way. The chain clock cannot go back, and once it is ahead of your computer every
-        permit signature will look expired. Restart the node to reset it.
+        One way. The chain clock cannot go back; restart the node to reset it.
       </p>
     </section>
   );
