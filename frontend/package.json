@@ -9,7 +9,8 @@
     "lint": "eslint",
     "clean:testdata": "tsx scripts/clean-test-data.ts",
     "e2e:cycle": "tsx scripts/cp7-cycle.ts",
-    "e2e:guards": "tsx --conditions=react-server scripts/cp8-guards.ts"
+    "e2e:guards": "tsx --conditions=react-server scripts/cp8-guards.ts",
+    "e2e:moderation": "tsx --conditions=react-server --env-file=.env.local scripts/cp9-moderation.ts"
   },
   "dependencies": {
     "@privy-io/react-auth": "^3.36.0",

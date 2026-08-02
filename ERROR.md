@@ -487,6 +487,37 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   quát hơn: số nào contract quyết thì đọc từ contract, đừng tính lại ở frontend.
 - **Skill đích:** `vibe-code-dapp`
 
+### [2026-08-01] Viết ca test từ tưởng tượng, bản thật khó hơn đúng chỗ quyết định
+
+- **Chuyện gì xảy ra:** Hàm đọc kết quả của model cắt từ dấu `{` đầu tới `}` cuối. Tự nghĩ
+  ra ca test "model nói lảm nhảm trước rồi mới trả JSON", nhưng bản tưởng tượng chỉ có
+  chữ. Bản thật có **JSON nháp và một bản copy của khuôn mẫu nằm ngay trong phần suy
+  nghĩ**, nên lát cắt ôm trọn cả đoạn văn và parse chết. 15 test xanh, code hỏng.
+- **Sai ở đâu:** Ca test viết ra để khớp với hình dung của mình về vấn đề, chứ không phải
+  để khớp với vấn đề. Tệ hơn: lỗi này rơi vào nhánh an toàn nên tin bẩn vẫn bị chặn đúng,
+  **chỉ tin sạch mới bị từ chối oan**. Nhìn từ ngoài giống bộ lọc nghiêm khắc chứ không
+  giống parser hỏng, và nếu user không dán đúng output thật thì không ai phát hiện.
+- **Luật rút ra:** Ca test cho dữ liệu từ hệ thống ngoài phải **copy nguyên văn output
+  thật**, chạy một lần rồi dán vào, không được tự bịa. Và khi một lỗi rơi vào nhánh an
+  toàn thì phải test cả nhánh ngược lại: chỗ nào "hỏng thì từ chối", chỗ đó bắt buộc có
+  ca phải-được-duyệt, vì đó là ca duy nhất lộ ra lỗi.
+- **Skill đích:** `agentic-engineering`
+
+### [2026-08-01] Ghi tên model vào luật dự án bằng trí nhớ, tới lúc dùng thì model đã bị gỡ
+
+- **Chuyện gì xảy ra:** CLAUDE.md mục 6 chốt sẵn từ đầu dự án là dùng Llama Guard cho chữ
+  và Llama 4 Scout cho ảnh. Tới checkpoint 9 mới tra thì Groq đã bỏ cả hai khỏi danh mục.
+  Model kiểm duyệt chuyên dụng còn lại thì đang preview, mà chính CLAUDE.md cấm preview.
+  Ba dòng luật tự đá nhau, và phải dừng lại hỏi user để sửa luật.
+- **Sai ở đâu:** Chốt một chi tiết vận hành của **dịch vụ ngoài** vào tài liệu thiết kế ở
+  thời điểm chưa dùng tới nó, dựa trên hiểu biết có hạn sử dụng. Danh mục model đổi theo
+  tháng, còn tài liệu thiết kế thì nằm im.
+- **Luật rút ra:** Trong tài liệu thiết kế chỉ ghi **yêu cầu** ("cần model đọc được ảnh,
+  không dùng bản preview"), đừng ghi tên cụ thể. Tên model chốt ở lúc code, sau khi gọi
+  API liệt kê model của nhà cung cấp. Áp cho mọi thứ tương tự: model, gói giá, endpoint,
+  giới hạn rate.
+- **Skill đích:** `dapp-discovery`, `agentic-engineering`
+
 ### [2026-08-01] Dùng control gốc của trình duyệt trong app một ngôn ngữ
 
 - **Chuyện gì xảy ra:** Ô chọn ảnh dùng `<input type="file">` trần. Trên trình duyệt để

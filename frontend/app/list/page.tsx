@@ -14,9 +14,11 @@ import {
   validateDraft,
   validateImages,
 } from "@/lib/listing";
+import { type Moderation, ModerationResult } from "@/components/moderation-result";
 import { LocalPhoto } from "@/components/photo";
 import { PriceHint } from "@/components/price-hint";
 import { PublishedListing } from "@/components/published-listing";
+import { downscale } from "@/lib/downscale";
 
 /**
  * Listing flow, three steps on one route.
@@ -38,6 +40,7 @@ export default function ListPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
+  const [moderation, setModeration] = useState<Moderation>({ state: "idle" });
 
   // Previews are local object URLs, so nothing is uploaded until Publish. Abandon the
   // flow at step 2 and no orphan files are left in storage.
@@ -64,12 +67,16 @@ export default function ListPage() {
     setFiles([]);
     setErrors({});
     setSubmitError(null);
+    setModeration({ state: "idle" });
     setStep(1);
   }
 
   function set<K extends keyof ListingDraft>(key: K, value: ListingDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
+    // A verdict belongs to the words it was given. Change one and the old answer is about
+    // a listing that no longer exists, so it stops being shown.
+    setModeration({ state: "idle" });
   }
 
   /**
@@ -77,7 +84,8 @@ export default function ListPage() {
    * So the cap lives here. Rejecting the whole selection rather than silently keeping the
    * first two, because quietly discarding files somebody chose is worse than saying no.
    */
-  function pickPhotos(picked: File[]) {
+  async function pickPhotos(picked: File[]) {
+    setModeration({ state: "idle" });
     if (picked.length > IMAGES_PER_LISTING) {
       setFiles([]);
       setErrors((c) => ({
@@ -86,7 +94,9 @@ export default function ListPage() {
       }));
       return;
     }
-    setFiles(picked);
+    // Shrunk here, once, so the same smaller file is what gets checked, uploaded and
+    // later served. A phone photo is several megabytes and pays for that three times.
+    setFiles(await Promise.all(picked.map(downscale)));
     setErrors((c) => ({ ...c, images: undefined }));
   }
 
@@ -96,10 +106,50 @@ export default function ListPage() {
     if (Object.values(found).every((v) => !v)) setStep(2);
   }
 
-  function goToReview() {
+  /**
+   * Checks before letting the flow move on, so a rejection lands while the draft is still
+   * on screen and editable rather than at the moment somebody presses publish.
+   *
+   * This is a courtesy, not the gate. The publish route runs the same check and is the
+   * one that actually stops anything.
+   */
+  async function checkThenReview() {
     const problem = validateImages(files);
     setErrors({ images: problem ?? undefined });
-    if (!problem) setStep(3);
+    if (problem) return;
+
+    setModeration({ state: "checking" });
+    try {
+      const body = new FormData();
+      body.set("title", draft.title.trim());
+      body.set("description", draft.description.trim());
+      files.forEach((file) => body.append("images", file));
+
+      const response = await fetch("/api/moderate", {
+        method: "POST",
+        headers: identityToken ? { "privy-id-token": identityToken } : undefined,
+        body,
+      });
+      const result = await response.json();
+
+      if (response.status === 503) {
+        setModeration({ state: "unavailable", message: result.error });
+        return;
+      }
+      if (!response.ok) {
+        setModeration({ state: "reject", reasons: [result.error ?? "Could not check this."] });
+        return;
+      }
+      if (result.decision === "reject") {
+        setModeration({ state: "reject", reasons: result.reasons });
+        return;
+      }
+
+      setModeration({ state: "approve" });
+      setStep(3);
+    } catch {
+      setModeration({ state: "unavailable", message: "The check could not be sent." });
+    }
   }
 
   async function publish() {
@@ -132,6 +182,20 @@ export default function ListPage() {
         body,
       });
       const result = await response.json();
+
+      // The publish route runs the same check. It can disagree with step 2 when the draft
+      // changed after it passed, so the reasons are shown the same way here rather than
+      // flattened into a one line error that says nothing actionable.
+      if (response.status === 422) {
+        setModeration({ state: "reject", reasons: result.reasons ?? [] });
+        setStep(2);
+        return;
+      }
+      if (response.status === 503) {
+        setModeration({ state: "unavailable", message: result.error });
+        setStep(2);
+        return;
+      }
       if (!response.ok) throw new Error(result.error ?? "Could not publish.");
       setPublishedId(result.id);
     } catch (error) {
@@ -250,14 +314,16 @@ export default function ListPage() {
           )}
 
           <p className="text-xs text-ink-muted">
-            An agent will check listings automatically from checkpoint 9. For now nothing
-            reviews them, and every listing is marked pending.
+            Listings are checked automatically before they go live. Nothing is uploaded
+            until you publish.
           </p>
+
+          <ModerationResult result={moderation} />
 
           <Actions
             onBack={() => setStep(1)}
-            onNext={goToReview}
-            nextLabel="Review"
+            onNext={checkThenReview}
+            nextLabel={moderation.state === "checking" ? "Checking..." : "Check and review"}
           />
         </section>
       )}

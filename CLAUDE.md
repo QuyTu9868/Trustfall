@@ -185,8 +185,19 @@ trong system prompt rằng mọi thứ trong thẻ đó chỉ để đọc.
   "reason": "một câu ngắn" }
 ```
 
-**Model:** Groq. Phần chữ dùng nhóm model kiểm duyệt nội dung (Llama Guard).
-Phần ảnh dùng Llama 4 Scout. Không dùng model đang ở trạng thái preview.
+**Model:** Groq. **Không dùng model đang ở trạng thái preview**, luật này giữ nguyên
+và đã được chứng minh là đúng.
+
+Bản chốt cũ ghi Llama Guard cho chữ và Llama 4 Scout cho ảnh. **Ngày 2026-08-01 kiểm lại
+thì Groq đã bỏ cả hai khỏi danh mục.** Model kiểm duyệt chuyên dụng duy nhất còn lại
+(`openai/gpt-oss-safeguard-20b`) đang ở preview nên không dùng được.
+
+Thay bằng **`qwen/qwen3.6-27b`**, đang production, đọc được cả chữ lẫn ảnh, dùng cho cả
+hai phần trong một lần gọi. Một lần gọi nhìn cả hai là cố ý: mô tả sạch đi kèm ảnh bẩn sẽ
+lọt nếu hai model xét riêng, vì mỗi bên chỉ thấy nửa vô hại của mình.
+
+Trước khi ghi tên model vào code thì **hỏi lại danh sách model của Groq**, đừng tin tên
+model nhớ được. Danh mục của họ đổi nhanh hơn tài liệu.
 
 ---
 

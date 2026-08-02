@@ -9,6 +9,7 @@ import {
   MAX_TITLE_LENGTH,
   type Category,
 } from "@/lib/listing";
+import { ModerationUnavailable, moderateListing, toDataUrls } from "@/lib/moderation";
 import {
   AuthError,
   readIdentityToken,
@@ -31,6 +32,9 @@ export async function POST(request: Request) {
     return await createListing(request);
   } catch (error) {
     if (error instanceof AuthError) return errorResponse(error, 401);
+    // The checker being down is not the listing's fault, and 503 is what tells the owner
+    // to wait rather than to rewrite their description.
+    if (error instanceof ModerationUnavailable) return errorResponse(error, 503);
     // Missing configuration, an unreachable database, a rejected upload: all land here
     // with a message, rather than as a bare 500 with an empty body.
     return errorResponse(error);
@@ -58,6 +62,24 @@ async function createListing(request: Request) {
   });
   if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
+  // The gate. The browser ran this too, at step 2, so the owner saw it coming, but that
+  // call can simply not be made. Nothing is written or uploaded until this passes, so a
+  // rejected listing leaves no row and no file behind.
+  //
+  // Fails closed on purpose. A moderation step that waves listings through whenever the
+  // model is unreachable is not a moderation step, it is a delay.
+  const verdict = await moderateListing({
+    title,
+    description,
+    images: await toDataUrls(images),
+  });
+  if (verdict.decision === "reject") {
+    return NextResponse.json(
+      { error: "This listing was not accepted.", reasons: verdict.reasons },
+      { status: 422 }
+    );
+  }
+
   const supabase = getSupabaseAdmin();
 
   // The row first, so an image can never be orphaned without a listing pointing at it.
@@ -71,9 +93,10 @@ async function createListing(request: Request) {
       price_per_day: pricePerDay,
       deposit,
       status: "published",
-      // Moderation arrives in checkpoint 9. Until then every listing sits at pending,
-      // which is honest: nothing has looked at it yet.
-      moderation_status: "pending",
+      // Only approved listings reach this line: a rejection returned above without
+      // writing anything. The column stays because a later human review, or a model
+      // that changes its mind, needs somewhere to say so.
+      moderation_status: "approved",
     })
     .select("id")
     .single();
