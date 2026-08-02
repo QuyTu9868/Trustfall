@@ -4,6 +4,7 @@ import { useIdentityToken } from "@privy-io/react-auth";
 import { useState } from "react";
 import { useAccount, useConfig } from "wagmi";
 import {
+  getBlock,
   readContract,
   signTypedData,
   waitForTransactionReceipt,
@@ -96,7 +97,17 @@ export function useRequestRental() {
         chainId: targetChain.id,
       })) as bigint;
 
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + PERMIT_WINDOW_SECONDS);
+      // Counted from the chain's clock, not this machine's. The contract compares the
+      // deadline against block.timestamp, so a signature dated by the browser is dated by
+      // the wrong clock: on a local chain wound forward it is already three days stale
+      // before it is sent, and on a real network anybody whose computer is off by an hour
+      // has the same problem.
+      //
+      // What that looked like was not a clock error at all. The permit reverted as
+      // expired, the catch below swallowed it, and the failure surfaced as the transfer
+      // finding an allowance of zero.
+      const chainNow = await getBlock(config, { chainId: targetChain.id });
+      const deadline = chainNow.timestamp + BigInt(PERMIT_WINDOW_SECONDS);
 
       const signature = await signTypedData(config, {
         domain: {
