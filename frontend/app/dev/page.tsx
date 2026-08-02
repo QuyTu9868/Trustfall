@@ -177,6 +177,7 @@ export default function DevPage() {
       </section>
 
       <TimeTravel />
+      <ModerationSwitch />
     </main>
   );
 }
@@ -246,6 +247,100 @@ function TimeTravel() {
       <p className="text-xs text-ink-muted">
         One way. The chain clock cannot go back, and once it is ahead of your computer every
         permit signature will look expired. Restart the node to reset it.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Turns the listing check off and on without restarting anything.
+ *
+ * The state lives on the server, not here. This asks the server what it is and asks it to
+ * change, which is why the button can exist at all: a page that could pass "skip the
+ * check" along with a listing would be a page anyone could imitate.
+ *
+ * Local only, and the route enforces that itself rather than relying on this component
+ * not being rendered.
+ */
+function ModerationSwitch() {
+  const [bypassed, setBypassed] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (targetChain.id !== 31337) return;
+    let active = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/dev/moderation");
+        if (!response.ok) return;
+        const result = await response.json();
+        if (active) setBypassed(Boolean(result.bypassed));
+      } catch {
+        // Falls back to "the check is on", which is both the safe reading and the one
+        // that leaves the button usable. Staying unknown would disable it forever behind
+        // the word Checking, with no way to press anything.
+        if (active) setBypassed(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (targetChain.id !== 31337) return null;
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/dev/moderation", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bypassed: !bypassed }),
+      });
+      const result = await response.json();
+      setBypassed(Boolean(result.bypassed));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="flex max-w-xl flex-col gap-3 rounded-card border border-line bg-surface p-4">
+      <h2 className="text-sm">Listing check</h2>
+      <p className="text-xs text-ink-muted">
+        Every listing is read by a model before it goes live. The free tier allows about
+        one listing a minute, which is slow going when seeding demo data.
+      </p>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={toggle}
+          disabled={busy || bypassed === null}
+          className="w-fit rounded-control border border-line px-4 py-2 text-sm disabled:opacity-50"
+        >
+          {bypassed === null ? "Checking..." : bypassed ? "Turn the check back on" : "Skip the check"}
+        </button>
+        {bypassed !== null && (
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
+              bypassed ? "bg-stop-bg text-stop-ink" : "bg-live-bg text-live-ink"
+            }`}
+          >
+            {bypassed ? "off" : "on"}
+          </span>
+        )}
+      </div>
+
+      {bypassed && (
+        <p className="text-xs text-stop-ink">
+          Nothing is being checked. The listing page says so too, so a screenshot taken now
+          will not look like a listing that passed.
+        </p>
+      )}
+
+      <p className="text-xs text-ink-muted">
+        Local chain only, and the server enforces that. On any real network this switch
+        does nothing and the check always runs.
       </p>
     </section>
   );

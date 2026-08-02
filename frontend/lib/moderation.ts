@@ -83,16 +83,27 @@ const RETRY_DELAYS_MS = [12_000, 25_000, 40_000];
 /**
  * Whether the check is switched off for local development.
  *
- * Two conditions, and the second is the one that matters. The environment variable alone
- * would be one careless deploy away from a marketplace with no moderation at all, so it
- * is only honoured on the local Hardhat chain. On Sepolia this returns false no matter
- * what anybody puts in the environment.
+ * Lives on the server, in memory, for the life of the dev process. The toggle on /dev
+ * sends a request that changes this; it does not send a flag along with the listing. That
+ * distinction is the whole design: a bypass the browser can ask for on the way past is
+ * not a bypass, it is the absence of a gate, and it would work just as well from curl.
  *
- * Deliberately not driven by anything the browser sends. A bypass a client can ask for is
- * not a bypass, it is the absence of a gate.
+ * The environment variable is only the starting value, so a seeding script can run with
+ * the check off without anybody clicking anything.
  */
+let bypassOverride: boolean | null = null;
+
 export function moderationBypassed() {
-  return targetChain.id === 31337 && process.env.MODERATION_BYPASS === "1";
+  // Chain id first, and it decides on its own. Whatever is in memory or in the
+  // environment, this returns false anywhere that is not the local Hardhat node, so no
+  // deployment and no forgotten toggle can leave a real marketplace unmoderated.
+  if (targetChain.id !== 31337) return false;
+  return bypassOverride ?? process.env.MODERATION_BYPASS === "1";
+}
+
+/** Only /api/dev/moderation calls this, and only after checking the chain itself. */
+export function setModerationBypass(off: boolean) {
+  bypassOverride = off;
 }
 
 export async function moderateListing(input: {
