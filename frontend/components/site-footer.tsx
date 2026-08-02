@@ -4,7 +4,7 @@ import { targetChain } from "@/lib/chain";
 export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-line">
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 px-6 py-6 text-xs text-ink-muted">
+      <div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center gap-x-4 gap-y-1 px-6 py-6 text-xs text-ink-muted">
         <span>Trustfall</span>
         <span aria-hidden>·</span>
         <span>{targetChain.name}</span>

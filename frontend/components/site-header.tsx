@@ -10,7 +10,6 @@ import { UnreadBadge } from "./unread-badge";
 const nav = [
   { href: "/", label: "Browse" },
   { href: "/list", label: "List an item" },
-  { href: "/listings/mine", label: "Your listings" },
   { href: "/profile", label: "Profile" },
 ];
 
@@ -20,7 +19,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-canvas/90 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-8 px-6">
+      <div className="mx-auto flex h-14 w-full max-w-[90rem] items-center gap-8 px-6">
         <Link href="/" className="font-display text-xl text-ink-strong">
           Trustfall
         </Link>

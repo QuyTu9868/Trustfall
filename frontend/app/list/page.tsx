@@ -281,7 +281,7 @@ function ListFlow() {
   }
 
   return (
-    <main className="flex max-w-2xl flex-col gap-8">
+    <main className="flex max-w-3xl flex-col gap-8">
       <header className="flex flex-col gap-3">
         <h1 className="text-3xl">List an item</h1>
         <Steps current={step} />

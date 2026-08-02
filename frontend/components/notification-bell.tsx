@@ -130,7 +130,7 @@ export function NotificationBell() {
                     // people stop opening.
                     href={
                       item.listing_id
-                        ? "/listings/mine"
+                        ? "/profile"
                         : item.onchain_rental_id
                           ? `/rentals/${item.onchain_rental_id}`
                           : "/profile"

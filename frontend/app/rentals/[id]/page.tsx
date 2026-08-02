@@ -42,7 +42,7 @@ export default function RentalPage(props: { params: Promise<{ id: string }> }) {
   const rental = rentals.find((entry) => entry.id.toString() === id);
 
   return (
-    <main className="flex max-w-4xl flex-col gap-6">
+    <main className="flex max-w-[76rem] flex-col gap-6">
       <Link href="/profile" className="w-fit text-sm text-ink-muted underline decoration-line">
         Back to your profile
       </Link>

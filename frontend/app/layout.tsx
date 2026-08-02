@@ -46,7 +46,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <Providers>
           <SiteHeader />
-          <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
+          <div className="mx-auto w-full max-w-[90rem] flex-1 px-6 py-10">
             {/* Wraps the page, not the header. The header stays visible so the address on
                 screen is right there next to the warning explaining it. */}
             <IdentityGuard>{children}</IdentityGuard>
