@@ -82,6 +82,32 @@ Bốn dòng, không dài hơn. Entry dài thì không ai đọc lại.
 Chỗ này ghi những thói lặp đi lặp lại: gộp checkpoint khi luật bắt tách, sửa triệu
 chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "xong" khi chưa test.
 
+### [2026-08-02] Bỏ qua skill bắt buộc suốt cả buổi, user phải nhắc mới chạy
+
+- **Chuyện gì xảy ra:** CLAUDE.md mục 3.3 và mục 10 ghi `code-change-workflow` là **bắt
+  buộc mỗi lần** user báo lỗi hoặc xin thêm bớt đổi chức năng. Đi qua hàng chục lượt sửa
+  trong ngày mà không chạy nó lần nào. User phải nói "bạn quên 1 bước, check lại skill đi".
+- **Sai ở đâu:** Coi luật bắt buộc là thứ để nhớ trong lúc làm. Hậu quả cụ thể: nhảy thẳng
+  vào code mà bỏ Bước 0 nhắc lại ý hiểu, nên có lần làm xong user mới nói "sửa lại thành
+  review bên cạnh, chat ở dưới" - đúng loại lãng phí mà Bước 0 sinh ra để chặn.
+- **Luật rút ra:** Chữ "bắt buộc" trong CLAUDE.md phải được kiểm ở **đầu lượt**, trước khi
+  đọc file đầu tiên, không phải nhớ tới đâu làm tới đó. Cụ thể: user nhắn có chứa báo lỗi
+  hoặc yêu cầu đổi chức năng thì lệnh đầu tiên là gọi skill, không phải Grep.
+- **Skill đích:** `dapp-build-router`, `code-change-workflow`
+
+### [2026-08-02] Sửa một chỗ đọc nhầm đồng hồ, không quét các chỗ còn lại
+
+- **Chuyện gì xảy ra:** Sáng sửa đồng hồ đếm ngược vì nó đọc giờ máy trong khi contract xét
+  `block.timestamp`. Trưa script seed chết vì đúng lỗi đó. Tối hạn chữ ký permit cũng đúng
+  lỗi đó, và lần này **chặn hẳn việc thuê**, hiện ra dưới dạng lỗi thiếu hạn mức token khó
+  hiểu. Ba lần sửa lẻ trong một ngày cho cùng một loại sai.
+- **Sai ở đâu:** Sửa đúng chỗ được báo rồi dừng, không hỏi "chỗ nào khác cũng đọc sai
+  nguồn như thế". Loại sai này không đứng một mình bao giờ.
+- **Luật rút ra:** Sửa xong một lỗi thì **quét cả họ ngay trong lượt đó**, bằng grep chứ
+  không bằng trí nhớ. Ở đây là `Date.now()` trong mọi chỗ so với thứ contract xét. Nguyên
+  tắc chung: mọi hạn chót do contract quyết phải đo bằng giờ chain.
+- **Skill đích:** `code-change-workflow`, `vibe-code-dapp`
+
 ### [2026-08-01] Lặp lại đúng lỗi vừa tự ghi vào file này vài giờ trước
 
 - **Chuyện gì xảy ra:** Sáng ghi entry "viết một assert luôn đúng rồi tính nó là test đã
@@ -486,6 +512,58 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   nhất rồi tính chênh lệch, đồng hồ máy chỉ dùng để lấp các giây giữa hai block. Tổng
   quát hơn: số nào contract quyết thì đọc từ contract, đừng tính lại ở frontend.
 - **Skill đích:** `vibe-code-dapp`
+
+### [2026-08-02] Khoá dữ liệu off-chain theo một id mà chain local dùng lại từ đầu
+
+- **Chuyện gì xảy ra:** Review khoá theo số thứ tự đơn thuê trên chain. Dựng lại node
+  local là số quay về 1, nên **đơn #1 mới thừa hưởng review của đơn #1 cũ đã biến mất**.
+  User thấy đánh giá của người lạ trên đơn mình chưa làm gì, và ô viết review loé lên chưa
+  tới một giây rồi bị thay bằng review cũ.
+- **Sai ở đâu:** Chốt đúng rằng đơn thuê sống trên chain và off-chain trỏ vào bằng id, mà
+  không hỏi **id đó có bị dùng lại không**. Trên testnet thì không, nhưng chain local dựng
+  lại liên tục, nên bug chỉ hiện lúc dev và dễ bị coi là chuyện vặt của môi trường.
+- **Luật rút ra:** Dữ liệu ngoài chain trỏ vào dữ liệu trên chain thì id đó phải **duy
+  nhất qua các lần dựng lại chain**, hoặc quy trình reset chain phải dọn luôn dữ liệu bám
+  theo. Chọn cách hai thì gắn nó vào chính lệnh reset, đừng để người ta nhớ.
+- **Skill đích:** `vibe-code-dapp`
+
+### [2026-08-02] Báo đã sửa bố cục sau khi chỉ xem trạng thái mà nó tình cờ chạy đúng
+
+- **Chuyện gì xảy ra:** Tách chat và ô review thành hai cột, kiểm ở trạng thái Hoàn tất
+  thấy đúng, báo xong. Nhưng điều kiện bật hai cột là **cả hai cùng hiện**, mà review chỉ
+  có ở Hoàn tất. Ở trạng thái Returned, đúng cái user đang nhìn, không có gì thay đổi và
+  user phải hỏi lại "bạn có sửa chưa đó".
+- **Sai ở đâu:** Kiểm ở trạng thái thuận tay nhất rồi suy ra các trạng thái khác cũng vậy.
+  Với giao diện có điều kiện thì chính cái điều kiện đó là chỗ dễ sai nhất.
+- **Luật rút ra:** Sửa giao diện phụ thuộc trạng thái thì **liệt kê mọi trạng thái nó đi
+  qua** rồi xem từng cái, ưu tiên xem trạng thái user đang đứng chứ không phải trạng thái
+  dễ dựng lại nhất.
+- **Skill đích:** `minimalist-ui`, `frontend-e2e-wallet`
+
+### [2026-08-02] Số đo về token cho agent, để lần sau khỏi dò lại
+
+- **Chuyện gì xảy ra:** Cả một buổi dò cách nhét lọt một lần gọi kiểm duyệt hai ảnh vào
+  gói miễn phí Groq, 8000 token mỗi phút. Ghi lại kết quả đo được vì suy luận từ trực giác
+  sai gần hết.
+- **Đo được gì:**
+  - **Kích thước ảnh không ảnh hưởng token.** Cùng một tấm ở 1187x762, 512x329 và 224x144
+    đều tốn đúng 3599 token cho 2 tấm. Nén ảnh để tiết kiệm token là vô ích. Vẫn nên nén,
+    nhưng vì tốc độ tải trang.
+  - **`max_completion_tokens` bị tính vào hạn mức dù không dùng hết.** Đặt 4096 làm request
+    đòi 9048 trên trần 8000 và bị từ chối thẳng, thử lại bao nhiêu lần cũng vô ích.
+  - **Khe an toàn rất hẹp và phải dò nhị phân trên dữ liệu thật:** 3000 đòi 8143 (từ chối),
+    2560 model nghĩ hết chỗ trả rỗng, 2816 vừa đủ và dùng hết 2018.
+  - **Tắt suy nghĩ rẻ gấp 10 nhanh gấp 7 nhưng phán sai.** `reasoning_effort: none` từ chối
+    một tin xe máy hoàn toàn sạch.
+  - **`reasoning_format: hidden` không tiết kiệm token nào**, 1252 cả hai lần. Nó chỉ dọn
+    output.
+  - **Ảnh trắng rẻ hơn ảnh thật rõ rệt**, vì ảnh thật cho model nhiều thứ để suy nghĩ hơn.
+    Bộ test dùng ảnh trắng đo ra con số không dùng được cho sản phẩm.
+- **Luật rút ra:** Với API tính tiền theo token, **đo bằng thí nghiệm có đối chứng trên
+  đúng dữ liệu thật**, đổi một biến mỗi lần, đọc `usage` nhà cung cấp trả về. Và luôn chặn
+  trần thời gian chờ khi thử lại: tin thẳng `retry-after` khiến một lệnh đăng tin treo mười
+  lăm phút với vòng xoay và không lời giải thích.
+- **Skill đích:** `agentic-engineering`, `latch-agent-gateway`
 
 ### [2026-08-02] Bọc try/catch im lặng quanh một lời gọi, rồi lỗi thật nằm im trong đó
 
