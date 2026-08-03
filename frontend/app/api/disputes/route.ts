@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     const [{ data: evidence }, { data: verdict }] = await Promise.all([
       supabase
         .from("dispute_evidence")
-        .select("side, statement, created_at")
+        .select("side, statement, image_path, created_at")
         .eq("onchain_rental_id", Number(rental.id))
         .order("created_at"),
       supabase
@@ -39,15 +39,62 @@ export async function GET(request: Request) {
         .maybeSingle(),
     ]);
 
+    // Photographs too, not only the words. The arbitrator weighs the pictures most
+    // heavily, so a side that cannot see what was filed against them cannot tell whether
+    // the ruling was reasonable. Signed links, because the bucket stays private.
+    const paths = (evidence ?? [])
+      .map((row) => row.image_path)
+      .filter((path): path is string => Boolean(path));
+    const links = new Map<string, string>();
+    if (paths.length) {
+      const { data: signed } = await supabase.storage
+        .from(DISPUTE_EVIDENCE_BUCKET)
+        .createSignedUrls(paths, 60 * 60);
+      for (const entry of signed ?? []) {
+        if (entry.path && entry.signedUrl) links.set(entry.path, entry.signedUrl);
+      }
+    }
+
     // The statements are shown to both sides. Arguing about somebody's deposit behind
     // their back is not a thing this should make easy, and the arbitrator sees both
     // anyway, so hiding one from the other only misleads whoever is reading.
     return NextResponse.json({
       status: rental.status,
       mine: caller === rental.owner ? "owner" : "renter",
-      evidence: evidence ?? [],
+      evidence: (evidence ?? []).map(({ image_path, ...rest }) => ({
+        ...rest,
+        image_url: image_path ? (links.get(image_path) ?? null) : null,
+      })),
       verdict: verdict ?? null,
     });
+  } catch (error) {
+    if (error instanceof AuthError) return errorResponse(error, 401);
+    if (error instanceof RentalError) return errorResponse(error, error.status);
+    return errorResponse(error);
+  }
+}
+
+/** Tries the arbitrator again, for a dispute whose first attempt did not finish. */
+export async function PATCH(request: Request) {
+  try {
+    const caller = await walletFromIdentityToken(await readIdentityToken(request));
+    const { rentalId } = await request.json();
+    const { rental } = await readRentalAsParty(rentalId, caller);
+
+    const { data: existing } = await getSupabaseAdmin()
+      .from("dispute_verdicts")
+      .select("signed")
+      .eq("onchain_rental_id", Number(rental.id))
+      .maybeSingle();
+
+    // Only when nothing was applied. Re-running a signed verdict cannot change the money,
+    // the contract would refuse, but it would spend tokens and rewrite the record of a
+    // decision that already stands.
+    if (existing?.signed) {
+      return NextResponse.json({ error: "This one is already settled." }, { status: 409 });
+    }
+
+    return NextResponse.json({ ruling: await resolveDispute(rental.id) });
   } catch (error) {
     if (error instanceof AuthError) return errorResponse(error, 401);
     if (error instanceof RentalError) return errorResponse(error, error.status);

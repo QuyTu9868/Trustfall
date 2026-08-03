@@ -95,7 +95,7 @@ export function RentalCard({
   const canRelease = useSecondsLeft(releaseAt) === 0;
 
   async function send(
-    fn: "approveRental" | "cancel" | "finalize",
+    fn: "approveRental" | "cancel" | "finalize" | "openDispute",
     label: string,
   ) {
     setError(null);
@@ -113,8 +113,12 @@ export function RentalCard({
         hash,
         chainId: targetChain.id,
       });
-      // After the receipt, so the server sees the status the notification claims.
-      await announce(rental.id, TOLD[fn], identityToken ?? undefined);
+      // After the receipt, so the server sees the status the notification claims. Opening
+      // a dispute has no notice of its own: the other side finds out from the box that
+      // appears on the rental, which is also the only place they can answer it.
+      if (fn !== "openDispute") {
+        await announce(rental.id, TOLD[fn], identityToken ?? undefined);
+      }
       onChanged();
     } catch (cause) {
       const err = cause as { name?: string; shortMessage?: string };
@@ -258,6 +262,19 @@ export function RentalCard({
                 )}
               </span>
             </Secondary>
+
+            {/* Only while the money is still there to argue over. The contract refuses
+                from any other status, and a button that always reverts is worse than no
+                button. Either side can press it: the owner claiming damage and the renter
+                claiming the deposit is being kept unfairly are the same mechanism. */}
+            {(rental.status === "Active" || rental.status === "Returned") && (
+              <Secondary
+                onClick={() => send("openDispute", "dispute")}
+                busy={busy === "dispute"}
+              >
+                Something is wrong
+              </Secondary>
+            )}
 
             {rental.status === "Returned" && (
               <Action

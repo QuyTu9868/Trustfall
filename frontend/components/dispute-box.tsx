@@ -3,7 +3,12 @@
 import { useIdentityToken } from "@privy-io/react-auth";
 import { useEffect, useMemo, useState } from "react";
 
-type Filed = { side: "owner" | "renter"; statement: string; created_at: string };
+type Filed = {
+  side: "owner" | "renter";
+  statement: string;
+  image_url: string | null;
+  created_at: string;
+};
 type Ruling = {
   verdict: "refund_renter" | "split" | "pay_owner";
   confidence: number;
@@ -107,6 +112,29 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
 
   const alreadyFiled = filed?.some((entry) => entry.side === mine);
   const waitingOnThem = filed?.length === 1 && alreadyFiled;
+  const bothFiled = (filed?.length ?? 0) >= 2;
+
+  async function retry() {
+    setSending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/disputes", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...(identityToken ? { "privy-id-token": identityToken } : {}),
+        },
+        body: JSON.stringify({ rentalId: rentalId.toString() }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "That did not work.");
+      setReloads((count) => count + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That did not work.");
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <section className="flex flex-col gap-4 rounded-card border border-stop-ink/30 bg-stop-bg/40 p-4">
@@ -119,12 +147,25 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
         </p>
       </div>
 
+      {/* Both sides see both filings, photographs included. The arbitrator weighs the
+          pictures most heavily, so somebody who cannot see what was filed against them has
+          no way to judge whether the ruling was reasonable. */}
       {filed?.map((entry) => (
-        <div key={entry.side} className="flex flex-col gap-1 rounded-card border border-line bg-surface p-3">
+        <div key={entry.side} className="flex flex-col gap-2 rounded-card border border-line bg-surface p-3">
           <span className="text-xs text-ink-muted">
             The {entry.side} said, {new Date(entry.created_at).toLocaleString()}
           </span>
           <p className="text-sm whitespace-pre-wrap break-words">{entry.statement}</p>
+          {entry.image_url && (
+            /* object-contain, because a handover photo cropped to a square can hide the
+               very damage it was filed to show. */
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={entry.image_url}
+              alt={`Filed by the ${entry.side}`}
+              className="max-h-72 w-full rounded-card object-contain"
+            />
+          )}
         </div>
       ))}
 
@@ -173,6 +214,19 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
             <span className="text-xs text-ink-muted">You get one submission.</span>
           </div>
         </div>
+      )}
+
+      {/* The arbitrator can fail for reasons that have nothing to do with the dispute: a
+          busy minute, a request over the plan's limit. Without a way to ask again, that
+          leaves the deposit stuck until the seven day timeout decides it by default. */}
+      {bothFiled && !ruling?.signed && (
+        <button
+          onClick={retry}
+          disabled={sending}
+          className="w-fit rounded-control border border-line bg-surface px-4 py-2 text-sm disabled:opacity-40"
+        >
+          {sending ? "Asking..." : ruling ? "Ask the arbitrator again" : "Ask the arbitrator now"}
+        </button>
       )}
 
       {waitingOnThem && !ruling && (

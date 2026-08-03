@@ -53,6 +53,15 @@ export async function askGroq(input: {
   system: string;
   text: string;
   images: string[];
+  /**
+   * Room for the reply, when the caller needs a different balance.
+   *
+   * The reservation and the prompt share one allowance, so a longer question has to leave
+   * a shorter answer. The arbitrator's prompt carries two statements and a conversation on
+   * top of its photographs, which put the request over the limit at the default and got it
+   * refused outright rather than merely rationed.
+   */
+  maxCompletionTokens?: number;
 }): Promise<string> {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -68,7 +77,12 @@ export async function askGroq(input: {
   }
 }
 
-async function once(input: { system: string; text: string; images: string[] }) {
+async function once(input: {
+  system: string;
+  text: string;
+  images: string[];
+  maxCompletionTokens?: number;
+}) {
   const key = process.env.GROQ_API_KEY;
   if (!key) {
     throw new GroqUnavailable(
@@ -87,7 +101,7 @@ async function once(input: { system: string; text: string; images: string[] }) {
         // tell whether a verdict came from the facts or from the sampling.
         temperature: 0,
         response_format: { type: "json_object" },
-        max_completion_tokens: MAX_COMPLETION_TOKENS,
+        max_completion_tokens: input.maxCompletionTokens ?? MAX_COMPLETION_TOKENS,
         // Keeps the reasoning out of the reply. Measured: it saves no tokens, because the
         // model still does the thinking. Callers cope with it being there anyway, because
         // a provider that stops honouring this must not change any decision.
