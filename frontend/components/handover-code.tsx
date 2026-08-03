@@ -6,6 +6,7 @@ import { useConfig } from "wagmi";
 import { readContract, signTypedData } from "wagmi/actions";
 import { targetChain } from "@/lib/chain";
 import { escrowAbi, escrowAddress } from "@/lib/escrow";
+import { useChainNowSeconds } from "@/lib/use-chain-clock";
 import {
   HANDOVER_PRIMARY,
   HANDOVER_TYPES,
@@ -30,10 +31,10 @@ export function ShowHandoverCode({
   onClose: () => void;
 }) {
   const config = useConfig();
+  const chainNow = useChainNowSeconds();
   const canvas = useRef<HTMLCanvasElement>(null);
   const [payload, setPayload] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
-  const [left, setLeft] = useState(HANDOVER_WINDOW_SECONDS);
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
 
@@ -51,7 +52,10 @@ export function ShowHandoverCode({
       })) as bigint;
 
       const deadline = BigInt(
-        Math.floor(Date.now() / 1000) + HANDOVER_WINDOW_SECONDS
+        // Chain time. The contract checks this deadline against block.timestamp, so a
+        // code dated by the browser is born expired on any chain that has been wound
+        // forward, and the failure surfaces as a rejected signature rather than a clock.
+        chainNow + HANDOVER_WINDOW_SECONDS
       );
 
       // Cast because primaryType is chosen at runtime, and viem's types are built to
@@ -97,15 +101,10 @@ export function ShowHandoverCode({
     }
   }, [payload]);
 
-  // A visible countdown, because a code that quietly stops working is worse than one
-  // that says how long it has left.
-  useEffect(() => {
-    if (!expiresAt) return;
-    const tick = () => setLeft(Math.max(0, expiresAt - Math.floor(Date.now() / 1000)));
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [expiresAt]);
+  // A visible countdown, because a code that quietly stops working is worse than one that
+  // says how long it has left. Derived rather than ticked separately: chainNow already
+  // moves once a second, and a second timer would be a second opinion about the time.
+  const left = expiresAt ? Math.max(0, expiresAt - chainNow) : HANDOVER_WINDOW_SECONDS;
 
   return (
     <div className="flex flex-col gap-3 rounded-card border border-line bg-canvas p-4">

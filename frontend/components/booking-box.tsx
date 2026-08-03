@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useChainToday } from "@/lib/use-chain-clock";
 import { useState } from "react";
 import { parseUnits } from "viem";
 import { usePrivy } from "@privy-io/react-auth";
@@ -59,6 +60,7 @@ export function BookingBox({
   const router = useRouter();
   const { authenticated, login, user } = usePrivy();
   const { request, step, error, busy } = useRequestRental();
+  const chainToday = useChainToday();
   // Seeded from ?from= and ?to= so a set of dates can be linked to. Checkpoint 6 needs
   // that to send somebody a specific booking, and it also makes this panel, the one
   // screen where the money is spelled out, something that can be checked from a URL
@@ -133,6 +135,10 @@ export function BookingBox({
           <input
             type="date"
             value={start}
+            // Today on the chain, not on this computer. The contract refuses a booking
+            // that has already ended, and it works that out from block.timestamp, so a
+            // picker offering yesterday is offering something that cannot be bought.
+            min={chainToday}
             onChange={(e) => setStart(e.target.value)}
             className="tabular rounded-control border border-line px-2 py-1.5 text-sm"
           />
@@ -142,8 +148,9 @@ export function BookingBox({
           <input
             type="date"
             value={end}
-            // At least the day after collection, since a rental is measured in nights.
-            min={start ? nextDay(start) : undefined}
+            // At least the day after collection, since a rental is measured in nights,
+            // and never before the chain thinks tomorrow is.
+            min={start ? nextDay(start) : chainToday ? nextDay(chainToday) : undefined}
             onChange={(e) => setEnd(e.target.value)}
             className="tabular rounded-control border border-line px-2 py-1.5 text-sm"
           />
