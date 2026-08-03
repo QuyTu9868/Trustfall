@@ -31,7 +31,7 @@ export default function RentalPage(props: { params: Promise<{ id: string }> }) {
         <p className="max-w-xl text-sm text-ink-muted">Sign in to see this rental.</p>
         <button
           onClick={login}
-          className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-white"
+          className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas"
         >
           Sign in
         </button>

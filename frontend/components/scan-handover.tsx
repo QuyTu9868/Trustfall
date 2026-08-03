@@ -182,7 +182,7 @@ export function ScanHandover({
       <button
         onClick={() => submit(pasted)}
         disabled={status === "sending" || !pasted.trim()}
-        className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-white disabled:opacity-50"
+        className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas disabled:opacity-50"
       >
         {status === "sending" ? "Sending..." : "Submit the code"}
       </button>

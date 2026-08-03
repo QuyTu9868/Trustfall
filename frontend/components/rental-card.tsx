@@ -369,7 +369,7 @@ function Action({
     <button
       onClick={onClick}
       disabled={busy || disabled}
-      className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white active:scale-[0.98] disabled:opacity-40"
+      className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas active:scale-[0.98] disabled:opacity-40"
     >
       {busy ? "Confirm in your wallet..." : children}
     </button>

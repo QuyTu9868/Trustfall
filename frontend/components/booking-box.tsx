@@ -204,7 +204,7 @@ export function BookingBox({
       <button
         onClick={submit}
         disabled={busy || !canSubmit}
-        className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white active:scale-[0.98] disabled:opacity-40"
+        className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas active:scale-[0.98] disabled:opacity-40"
       >
         {label}
       </button>

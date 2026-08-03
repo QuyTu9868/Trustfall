@@ -106,7 +106,7 @@ export default function AdminPage() {
         <button
           onClick={signIn}
           disabled={busy || code.length < 6}
-          className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-white disabled:opacity-40"
+          className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas disabled:opacity-40"
         >
           {busy ? "Checking..." : "Unlock"}
         </button>

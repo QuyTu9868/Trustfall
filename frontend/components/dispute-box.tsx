@@ -206,7 +206,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
             <button
               onClick={file}
               disabled={sending || statement.trim().length === 0}
-              className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white disabled:opacity-40"
+              className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas disabled:opacity-40"
             >
               {sending ? "Filing..." : "File this"}
             </button>

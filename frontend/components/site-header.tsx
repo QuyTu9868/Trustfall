@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useUnread } from "@/lib/use-unread";
 import { AccountButton } from "./account-button";
 import { NotificationBell } from "./notification-bell";
+import { ThemeToggle } from "./theme-toggle";
 import { UnreadBadge } from "./unread-badge";
 
 const nav = [
@@ -17,15 +18,19 @@ export function SiteHeader() {
   const pathname = usePathname();
   const unread = useUnread();
 
+  // Nothing behind these links is reachable signed out, and a row of dead ends is a worse
+  // first impression than no row at all. The wordmark and the sign in button stay.
+  const landing = pathname === "/homepage";
+
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-canvas/90 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-[90rem] items-center gap-8 px-6">
-        <Link href="/" className="font-display text-xl text-ink-strong">
+        <Link href={landing ? "/homepage" : "/"} className="font-display text-xl text-ink-strong">
           Trustfall
         </Link>
 
         <nav className="flex items-center gap-6 text-sm">
-          {nav.map((item) => {
+          {(landing ? [] : nav).map((item) => {
             const active =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
@@ -44,7 +49,8 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-3">
-          <NotificationBell />
+          <ThemeToggle />
+          {!landing && <NotificationBell />}
           <AccountButton />
         </div>
       </div>

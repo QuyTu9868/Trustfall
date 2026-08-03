@@ -78,7 +78,7 @@ export default function ProfilePage() {
         </p>
         <button
           onClick={login}
-          className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-white"
+          className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas"
         >
           Sign in
         </button>

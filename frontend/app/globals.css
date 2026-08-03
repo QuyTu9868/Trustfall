@@ -7,10 +7,14 @@
   scarce resource here: it appears only on status badges, where it means something.
 
   No animation anywhere in the app. UI-REFERENCE.md section 5 rules it out because the
-  demo gets judged on whatever laptop is to hand, and light beats pretty.
+  demo gets judged on whatever laptop is to hand, and light beats pretty. The landing page
+  at /homepage is the one exception, and it fades sections in with plain CSS.
 
-  Light only, no dark mode. One theme to get right instead of two, and every screenshot
-  and screen recording of the demo then looks the same.
+  Two themes. Dark is expressed by overriding these same variables further down rather than
+  by writing dark: on every element, so the whole app followed without any component
+  changing. The one thing that did have to change was text-white, which meant "the opposite
+  of ink-strong" and stopped meaning that the moment ink-strong went pale. It is text-canvas
+  now, which is that idea named properly and correct in both themes.
 */
 
 @theme {
@@ -42,9 +46,57 @@
   --radius-control: 5px;
 }
 
+/*
+  Dark.
+
+  Not the light palette inverted. Pure white on pure black vibrates, so ink-strong stops
+  short of white and the canvas keeps the same warm cast the light theme has. The status
+  pastels swap roles: the background becomes a deep, desaturated version of the hue and the
+  text becomes the bright one, because a pale wash that reads as a tint on white reads as a
+  glare on black.
+
+  Written twice on purpose. The media query follows the operating system, and the attribute
+  follows the switch in the header. :not([data-theme="light"]) is what lets somebody on a
+  dark desktop choose light and keep it.
+*/
 html {
   background: var(--color-canvas);
   color-scheme: light;
+}
+
+/*
+  Dark.
+
+  One block, not two, because the attribute is always present: a script in the document
+  head resolves the choice before anything paints, falling back to the operating system
+  when nobody has chosen. Doing that resolution in JavaScript instead of in a media query
+  is what keeps this palette written once.
+
+  Not the light palette inverted. Pure white on pure black vibrates, so ink-strong stops
+  short of white and the canvas keeps the warm cast the light theme has. The status pastels
+  swap roles: the background becomes a deep desaturated version of the hue and the text
+  becomes the bright one, because a pale wash that reads as a tint on white reads as a
+  glare on black.
+*/
+:root[data-theme="dark"] {
+  --color-canvas: #17191b;
+  --color-surface: #1f2225;
+  --color-line: #303438;
+
+  --color-ink: #d5d7d9;
+  --color-ink-strong: #f4f4f3;
+  --color-ink-muted: #969693;
+
+  --color-pend-bg: #382d13;
+  --color-pend-ink: #e2b654;
+  --color-okay-bg: #14303f;
+  --color-okay-ink: #74b9e6;
+  --color-live-bg: #1a2f1d;
+  --color-live-ink: #82c48c;
+  --color-stop-bg: #391e20;
+  --color-stop-ink: #ea8783;
+
+  color-scheme: dark;
 }
 
 body {
@@ -62,6 +114,34 @@ h3 {
   color: var(--color-ink-strong);
   letter-spacing: -0.02em;
   line-height: 1.15;
+}
+
+/*
+  The landing page fade, and the only movement in the whole app.
+
+  backwards fill holds the element at the start of the animation during its delay, which is
+  what makes the stagger work. Only opacity and transform move, both of which the
+  compositor handles without laying the page out again.
+
+  The element's resting state is visible, so a browser that ignores the animation shows the
+  content rather than hiding it. That is the point: this used to be done in JavaScript and
+  the page rendered blank until React arrived.
+*/
+.reveal {
+  animation: reveal 0.7s ease-out backwards;
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: none;
+  }
 }
 
 /*

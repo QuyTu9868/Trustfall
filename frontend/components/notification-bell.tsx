@@ -207,7 +207,7 @@ function Section({
         <span className="flex items-center gap-2">
           {title}
           {badge > 0 && (
-            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-stop-ink px-1 text-[11px] leading-none text-white tabular">
+            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-stop-ink px-1 text-[11px] leading-none text-canvas tabular">
               {badgeCount(badge)}
             </span>
           )}

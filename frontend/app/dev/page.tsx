@@ -142,7 +142,7 @@ export default function DevPage() {
             <button
               onClick={mint}
               disabled={busy}
-              className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-white active:scale-[0.98] disabled:opacity-50"
+              className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas active:scale-[0.98] disabled:opacity-50"
             >
               {/* Say what the press will actually do. Unsigned-in, it opens the login
                   modal rather than minting anything. */}

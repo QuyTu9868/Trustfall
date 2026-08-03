@@ -20,7 +20,7 @@ export function AccountButton() {
     return (
       <button
         disabled
-        className="h-9 rounded-control bg-ink-strong px-4 text-sm text-white opacity-40"
+        className="h-9 rounded-control bg-ink-strong px-4 text-sm text-canvas opacity-40"
       >
         Sign in
       </button>
@@ -31,7 +31,7 @@ export function AccountButton() {
     return (
       <button
         onClick={login}
-        className="h-9 rounded-control bg-ink-strong px-4 text-sm text-white active:scale-[0.98]"
+        className="h-9 rounded-control bg-ink-strong px-4 text-sm text-canvas active:scale-[0.98]"
       >
         Sign in
       </button>

@@ -142,7 +142,7 @@ export function MyListings() {
             )}
             <Link
               href={`/list?edit=${listing.id}`}
-              className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white"
+              className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas"
             >
               {listing.moderation_status === "approved" ? "Edit" : "Edit and try again"}
             </Link>

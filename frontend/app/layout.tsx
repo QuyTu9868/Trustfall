@@ -43,6 +43,25 @@ export default function RootLayout({
       // console full of noise is a console where the real warning gets missed.
       suppressHydrationWarning
     >
+      <head>
+        {/*
+          Runs before the first paint, which is the only way to avoid a white flash on the
+          way into a dark page. A React effect is too late: by the time it runs the browser
+          has already drawn the light theme and the correction reads as a flicker.
+
+          ?theme=dark and ?theme=light force one for the length of the visit without
+          overwriting what the person chose. It exists so a link can be shared in a
+          particular theme, and it is also the only way to screenshot the other one.
+
+          Wrapped in try/catch because localStorage throws outright in a browser with
+          site data blocked, and a theme preference is not worth a blank page.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var q=new URLSearchParams(location.search).get('theme');var t=q==='dark'||q==='light'?q:localStorage.getItem('trustfall-theme');if(t!=='dark'&&t!=='light')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="flex min-h-full flex-col">
         <Providers>
           <SiteHeader />

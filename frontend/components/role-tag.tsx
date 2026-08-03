@@ -14,7 +14,7 @@ export function RoleTag({ owner }: { owner: boolean }) {
     <span
       className={`w-fit rounded-full px-2.5 py-1 text-xs tracking-wide uppercase ${
         owner
-          ? "bg-ink-strong text-white"
+          ? "bg-ink-strong text-canvas"
           : "border border-ink-strong text-ink-strong"
       }`}
     >

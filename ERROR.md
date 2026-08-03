@@ -625,6 +625,21 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   thế được.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-03] Nội dung mặc định vô hình, chờ JavaScript bật lên mới thấy
+
+- **Chuyện gì xảy ra:** Hiệu ứng hiện dần ở trang landing viết bằng IntersectionObserver:
+  HTML server gửi ra để `opacity-0`, React chạy rồi mới bật lên 1. Chụp màn hình lại thì
+  ra **trang trắng gần hoàn toàn**. Giám khảo mạng yếu, hoặc JS lỗi, sẽ thấy đúng như vậy.
+- **Sai ở đâu:** Lấy hiệu ứng làm mặc định thay vì lấy nội dung làm mặc định. Trạng thái
+  nghỉ của phần tử phải là "nhìn thấy được", còn hiệu ứng chỉ là đường đi tới đó.
+- **Luật rút ra:** Không bao giờ để nội dung ở trạng thái ẩn rồi trông chờ JavaScript hiện
+  nó ra. Fade thì dùng CSS `animation` với `backwards` fill: trình duyệt không chạy
+  animation thì vẫn thấy chữ. Đổi lại còn bỏ được cả một component `"use client"`.
+- **Cách phát hiện:** chụp màn hình. `tsc`, `eslint`, `npm run build` đều xanh với bug này,
+  vì không có gì sai kiểu và không có gì sai cú pháp. Cùng họ với entry "báo đã sửa bố cục
+  sau khi chỉ xem trạng thái tình cờ chạy đúng".
+- **Skill đích:** `landing-page-builder`
+
 ### [2026-08-03] Đổi hình dạng request gửi model, quên hai thứ đã chỉnh theo hình dạng cũ
 
 - **Chuyện gì xảy ra:** Bỏ ảnh khỏi lệnh gọi trọng tài. Hai thứ ăn theo ảnh vẫn nằm

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ListingCard } from "@/components/listing-card";
+import { SignedInOnly } from "@/components/signed-in-only";
 import { CATEGORIES, CATEGORY_LABELS } from "@/lib/listing";
 import {
   fetchCategoryCounts,
@@ -10,11 +11,13 @@ import {
 /**
  * Browse. A grid of cards, a row of category filters, page numbers underneath.
  *
- * All of it runs on the server and all of the state lives in the URL, so there is no
- * client JavaScript here at all: filtering is a link, paging is a link, and any view can
- * be bookmarked or sent to somebody. UI-REFERENCE.md section 3 also asks for the filters
- * laid out along the top rather than hidden in a drawer, and section 5 rules out infinite
- * scroll in favour of pages.
+ * All of it runs on the server and all of the state lives in the URL, so filtering is a
+ * link, paging is a link, and any view can be bookmarked or sent to somebody.
+ * UI-REFERENCE.md section 3 also asks for the filters laid out along the top rather than
+ * hidden in a drawer, and section 5 rules out infinite scroll in favour of pages.
+ *
+ * Signed out visitors are sent to /homepage instead. The gate has to run in the browser
+ * because that is where the answer lives, so it wraps the markup rather than replacing it.
  */
 export default async function BrowsePage(props: {
   searchParams: Promise<{ category?: string; page?: string }>;
@@ -38,6 +41,7 @@ export default async function BrowsePage(props: {
   };
 
   return (
+    <SignedInOnly>
     <main className="flex flex-col gap-8">
       <header className="flex flex-col gap-2">
         <h1 className="text-4xl">Rent real things, without trusting anyone.</h1>
@@ -96,6 +100,7 @@ export default async function BrowsePage(props: {
         </>
       )}
     </main>
+    </SignedInOnly>
   );
 }
 
@@ -116,7 +121,7 @@ function FilterLink({
     <Link
       href={href}
       className={`rounded-control border px-3 py-1.5 text-sm ${
-        active ? "border-ink-strong bg-ink-strong text-white" : "border-line bg-surface"
+        active ? "border-ink-strong bg-ink-strong text-canvas" : "border-line bg-surface"
       }`}
     >
       {children}

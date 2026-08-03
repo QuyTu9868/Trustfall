@@ -127,7 +127,7 @@ export function ShowHandoverCode({
           <button
             onClick={sign}
             disabled={signing}
-            className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="w-fit rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas disabled:opacity-50"
           >
             {signing ? "Sign in your wallet..." : "Create the code"}
           </button>

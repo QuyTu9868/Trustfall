@@ -140,7 +140,7 @@ export function ChatThread({ rentalId }: { rentalId: bigint }) {
             <div key={message.id} className={mine ? "self-end text-right" : "self-start"}>
               <div
                 className={`inline-block max-w-[36ch] overflow-hidden rounded-card text-sm ${
-                  mine ? "bg-ink-strong text-white" : "border border-line bg-surface"
+                  mine ? "bg-ink-strong text-canvas" : "border border-line bg-surface"
                 }`}
               >
                 {message.image_url && (
@@ -210,7 +210,7 @@ export function ChatThread({ rentalId }: { rentalId: bigint }) {
         <button
           onClick={send}
           disabled={sending || (draft.trim().length === 0 && !photo)}
-          className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white disabled:opacity-40"
+          className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas disabled:opacity-40"
         >
           {sending ? "Sending..." : "Send"}
         </button>

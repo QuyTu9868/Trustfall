@@ -121,7 +121,7 @@ export function ReviewBox({
             <button
               onClick={submit}
               disabled={sending}
-              className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white active:scale-[0.98] disabled:opacity-40"
+              className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas active:scale-[0.98] disabled:opacity-40"
             >
               {sending ? "Saving..." : "Post the review"}
             </button>

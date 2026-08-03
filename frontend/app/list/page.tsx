@@ -297,7 +297,7 @@ function ListFlow() {
                   onClick={() => set("category", category as Category)}
                   className={`rounded-control border px-3 py-1.5 text-sm ${
                     draft.category === category
-                      ? "border-ink-strong bg-ink-strong text-white"
+                      ? "border-ink-strong bg-ink-strong text-canvas"
                       : "border-line bg-surface"
                   }`}
                 >
@@ -551,7 +551,7 @@ function Actions({
       <button
         onClick={onNext}
         disabled={disabled}
-        className="rounded-control bg-ink-strong px-4 py-2 text-sm text-white active:scale-[0.98] disabled:opacity-50"
+        className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas active:scale-[0.98] disabled:opacity-50"
       >
         {nextLabel}
       </button>
