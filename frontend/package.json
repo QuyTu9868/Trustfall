@@ -11,6 +11,7 @@
     "e2e:cycle": "tsx scripts/cp7-cycle.ts",
     "e2e:guards": "tsx --conditions=react-server scripts/cp8-guards.ts",
     "e2e:moderation": "tsx --conditions=react-server --env-file=.env.local scripts/cp9-moderation.ts",
+    "e2e:arbitration": "tsx --conditions=react-server --env-file=.env.local scripts/cp10-arbitration.ts",
     "admin:setup": "tsx --conditions=react-server scripts/admin-setup.ts"
   },
   "dependencies": {

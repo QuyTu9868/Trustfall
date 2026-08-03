@@ -50,7 +50,6 @@ export async function resolveDispute(rentalId: bigint) {
     evidence: evidence.map((row) => ({
       side: row.side as "owner" | "renter",
       statement: row.statement,
-      imageDataUrl: null,
       submittedAt: row.created_at,
     })),
     chat: (chat ?? [])
