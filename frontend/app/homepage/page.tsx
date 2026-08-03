@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { LandingCta } from "@/components/landing-cta";
 import { Reveal } from "@/components/reveal";
 
@@ -47,8 +48,47 @@ export default function LandingPage() {
         </Reveal>
 
         <Reveal delayMs={220}>
+          {/* The one image above the fold, so it loads eagerly. Everything below waits
+              until it is scrolled to, which is what next/image does by default. */}
+          <Image
+            src="/landing/hero.jpg"
+            alt="Somebody handing over a rented item"
+            width={1600}
+            height={1000}
+            priority
+            sizes="(max-width: 1024px) 100vw, 1200px"
+            className="aspect-[16/9] w-full rounded-card border border-line object-cover"
+          />
+        </Reveal>
+
+        <Reveal delayMs={300}>
           <HandoverDiagram />
         </Reveal>
+      </section>
+
+      <section className="flex flex-col gap-8">
+        <Reveal>
+          <h2 className="text-3xl md:text-4xl">Three kinds of thing, one set of rules.</h2>
+        </Reveal>
+
+        <div className="grid gap-5 sm:grid-cols-3">
+          {CATEGORY_SHOTS.map((shot, index) => (
+            <Reveal key={shot.file} delayMs={index * 90} className="flex flex-col gap-3">
+              <Image
+                src={`/landing/${shot.file}.jpg`}
+                alt={shot.alt}
+                width={900}
+                height={1200}
+                sizes="(max-width: 640px) 100vw, 33vw"
+                className="aspect-[3/4] w-full rounded-card border border-line object-cover"
+              />
+              <div className="flex flex-col gap-1">
+                <h3 className="text-xl">{shot.title}</h3>
+                <p className="text-sm text-ink-muted">{shot.body}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
       </section>
 
       <section className="flex flex-col gap-10">
@@ -126,12 +166,11 @@ export default function LandingPage() {
 
       <section className="flex flex-col items-start gap-6 border-t border-line pt-16">
         <Reveal className="flex flex-col gap-4">
-          <h2 className="max-w-2xl text-4xl md:text-5xl">
-            It is a testnet. Nothing here costs real money.
-          </h2>
+          <h2 className="max-w-2xl text-4xl md:text-5xl">Put something up, or take something out.</h2>
           <p className="max-w-2xl text-ink-muted">
-            Sign in, list something, rent it from your other account, and take it all the
-            way through a dispute if you like. That is what it is for.
+            List an item, rent one from your other account, and take it all the way through
+            a dispute if you like. Every step is on chain and every step is reversible until
+            the money moves.
           </p>
         </Reveal>
         <Reveal delayMs={120}>
@@ -141,6 +180,34 @@ export default function LandingPage() {
     </main>
   );
 }
+
+/**
+ * The three categories the marketplace actually has, with a photograph each.
+ *
+ * The files in public/landing are flat grey placeholders at the right dimensions. Dropping
+ * a real photograph over each one, same name and roughly the same shape, is the whole
+ * change: nothing in this file has to move.
+ */
+const CATEGORY_SHOTS = [
+  {
+    file: "homes",
+    title: "Places",
+    alt: "A room available to rent",
+    body: "A spare room, a studio, a place to shoot in for an afternoon.",
+  },
+  {
+    file: "vehicles",
+    title: "Vehicles",
+    alt: "A scooter available to rent",
+    body: "Scooters and cars, by the day, with the deposit held until it comes back.",
+  },
+  {
+    file: "clothing",
+    title: "Clothing",
+    alt: "A dress available to rent",
+    body: "Worn once, hanging in a wardrobe, worth more in somebody else's evening.",
+  },
+];
 
 const NUMBERS = [
   { value: "1%", label: "Platform fee", note: "on completed rentals only" },
