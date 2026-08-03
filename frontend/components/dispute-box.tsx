@@ -141,15 +141,14 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
       <div className="flex flex-col gap-1">
         <h3 className="text-sm">Dispute</h3>
         <p className="text-xs text-ink-muted">
-          Both accounts go to an arbitrator, which picks one of three outcomes for the
-          deposit. It never sees an amount and never moves the money: the contract does the
-          arithmetic itself.
+          Both accounts go to an arbitrator, which reads the statements and your
+          conversation and picks one of three outcomes for the deposit. It never sees an
+          amount and never moves the money: the contract does the arithmetic itself.
         </p>
       </div>
 
-      {/* Both sides see both filings, photographs included. The arbitrator weighs the
-          pictures most heavily, so somebody who cannot see what was filed against them has
-          no way to judge whether the ruling was reasonable. */}
+      {/* Both sides see both filings, photographs included. Somebody who cannot see what
+          was filed against them has no way to judge whether the ruling was reasonable. */}
       {filed?.map((entry) => (
         <div key={entry.side} className="flex flex-col gap-2 rounded-card border border-line bg-surface p-3">
           <span className="text-xs text-ink-muted">
@@ -176,7 +175,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
             onChange={(event) => setStatement(event.target.value)}
             rows={3}
             maxLength={1500}
-            placeholder="What happened, in your words. One photo helps more than a paragraph."
+            placeholder="What happened, in your words. Describe it: the arbitrator reads text, and the photo is for the other side and the log."
             className="rounded-control border border-line bg-surface px-3 py-2 text-sm"
           />
 

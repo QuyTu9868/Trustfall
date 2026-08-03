@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
 import { endAdminSession, hasAdminSession, startAdminSession } from "@/lib/admin-session";
-import { getSupabaseAdmin } from "@/lib/supabase-server";
+import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "@/lib/supabase-server";
 import { verifyCode } from "@/lib/totp";
 
 /**
@@ -18,16 +18,56 @@ export async function GET() {
       return NextResponse.json({ error: "Not signed in." }, { status: 401 });
     }
 
-    const { data, error } = await getSupabaseAdmin()
+    const supabase = getSupabaseAdmin();
+
+    const { data, error } = await supabase
       .from("dispute_verdicts")
       .select(
-        "onchain_rental_id, verdict, confidence, reason, signed, tx_hash, held_back_reason, model, created_at"
+        "onchain_rental_id, verdict, confidence, reason, signed, tx_hash, held_back_reason, model, evidence_seen, created_at"
       )
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ verdicts: data ?? [] });
+
+    // Everything that was filed, beside every ruling. The photographs did not go to the
+    // model, and evidence_seen says so, but they are the material a person reviewing this
+    // would want most: it is the only way to tell whether the ruling was reasonable.
+    const ids = (data ?? []).map((row) => row.onchain_rental_id);
+    const { data: evidence } = ids.length
+      ? await supabase
+          .from("dispute_evidence")
+          .select("onchain_rental_id, side, statement, image_path, created_at")
+          .in("onchain_rental_id", ids)
+          .order("created_at")
+      : { data: [] };
+
+    const paths = (evidence ?? [])
+      .map((row) => row.image_path)
+      .filter((path): path is string => Boolean(path));
+    const links = new Map<string, string>();
+    if (paths.length) {
+      const { data: signed } = await supabase.storage
+        .from(DISPUTE_EVIDENCE_BUCKET)
+        .createSignedUrls(paths, 60 * 60);
+      for (const entry of signed ?? []) {
+        if (entry.path && entry.signedUrl) links.set(entry.path, entry.signedUrl);
+      }
+    }
+
+    return NextResponse.json({
+      verdicts: (data ?? []).map((row) => ({
+        ...row,
+        evidence: (evidence ?? [])
+          .filter((entry) => entry.onchain_rental_id === row.onchain_rental_id)
+          .map((entry) => ({
+            side: entry.side,
+            statement: entry.statement,
+            created_at: entry.created_at,
+            image_url: entry.image_path ? (links.get(entry.image_path) ?? null) : null,
+          })),
+      })),
+    });
   } catch (error) {
     return errorResponse(error);
   }

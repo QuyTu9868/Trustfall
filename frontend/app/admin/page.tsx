@@ -11,7 +11,14 @@ type Verdict = {
   tx_hash: string | null;
   held_back_reason: string | null;
   model: string;
+  evidence_seen: string;
   created_at: string;
+  evidence: {
+    side: "owner" | "renter";
+    statement: string;
+    image_url: string | null;
+    created_at: string;
+  }[];
 };
 
 const OUTCOME: Record<Verdict["verdict"], string> = {
@@ -162,6 +169,37 @@ export default function AdminPage() {
           </div>
 
           <p className="text-sm text-ink-muted">{entry.reason}</p>
+
+          {/* What it read, said plainly. The photographs are below, and a reader seeing
+              them next to a ruling would otherwise assume they were weighed. */}
+          <p className="text-xs text-pend-ink">
+            Reached from {entry.evidence_seen}. Anything not named there was filed but not
+            put in front of the model.
+          </p>
+
+          {entry.evidence.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {entry.evidence.map((filed) => (
+                <div
+                  key={filed.side}
+                  className="flex flex-col gap-2 rounded-card border border-line bg-canvas p-3"
+                >
+                  <span className="text-xs text-ink-muted">
+                    The {filed.side}, {new Date(filed.created_at).toLocaleString()}
+                  </span>
+                  <p className="text-sm whitespace-pre-wrap break-words">{filed.statement}</p>
+                  {filed.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={filed.image_url}
+                      alt={`Filed by the ${filed.side}`}
+                      className="max-h-64 w-full rounded-card object-contain"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* The two facts that matter most to somebody auditing this: whether money
               actually moved, and if not, why the server declined to move it. */}

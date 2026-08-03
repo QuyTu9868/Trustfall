@@ -3,7 +3,7 @@ import { MIN_CONFIDENCE, arbitrate } from "./arbitrate";
 import { NotSigned, signVerdict } from "./agent-signer";
 import { MODEL } from "./groq";
 import { readRental } from "./rental-server";
-import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "./supabase-server";
+import { getSupabaseAdmin } from "./supabase-server";
 
 /**
  * Runs a dispute end to end: gather, ask, check, sign, record.
@@ -26,39 +26,19 @@ export async function resolveDispute(rentalId: bigint) {
 
   const { data: evidence } = await supabase
     .from("dispute_evidence")
-    .select("side, statement, image_path, created_at")
+    .select("side, statement, created_at")
     .eq("onchain_rental_id", Number(rentalId))
     .order("created_at");
 
   if (!evidence?.length) throw new NotSigned("Nobody has submitted anything yet.");
 
-  // Signed links, valid for the length of one call. The bucket is private and stays that
-  // way: these are photographs somebody filed in an argument about money.
-  const paths = evidence.map((row) => row.image_path).filter((p): p is string => Boolean(p));
-  const links = new Map<string, string>();
-  if (paths.length) {
-    const { data: signed } = await supabase.storage
-      .from(DISPUTE_EVIDENCE_BUCKET)
-      .createSignedUrls(paths, 600);
-    for (const entry of signed ?? []) {
-      if (entry.path && entry.signedUrl) links.set(entry.path, entry.signedUrl);
-    }
-  }
-
-  const images = await Promise.all(
-    evidence.map(async (row) => {
-      if (!row.image_path) return null;
-      const url = links.get(row.image_path);
-      if (!url) return null;
-      // Fetched and inlined rather than handed over as a link. A signed URL would work,
-      // and would also mean posting a route into somebody's private bucket to a third
-      // party, which is a thing to do on purpose or not at all.
-      const response = await fetch(url);
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const type = response.headers.get("content-type") ?? "image/jpeg";
-      return `data:${type};base64,${buffer.toString("base64")}`;
-    })
-  );
+  // The photographs are deliberately not fetched. They are filed, stored, shown to both
+  // parties and listed in the admin log, but they do not go to the model: a two photo
+  // dispute does not fit inside the free tier's per minute allowance. Downloading them
+  // here to throw them away would be work done to look thorough.
+  //
+  // Restoring them is this block plus one line in arbitrate.ts, once there is an
+  // allowance they fit inside.
 
   const { data: chat } = await supabase
     .from("messages")
@@ -67,10 +47,10 @@ export async function resolveDispute(rentalId: bigint) {
     .order("created_at");
 
   const verdict = await arbitrate({
-    evidence: evidence.map((row, index) => ({
+    evidence: evidence.map((row) => ({
       side: row.side as "owner" | "renter",
       statement: row.statement,
-      imageDataUrl: images[index],
+      imageDataUrl: null,
       submittedAt: row.created_at,
     })),
     chat: (chat ?? [])
@@ -110,6 +90,10 @@ export async function resolveDispute(rentalId: bigint) {
       tx_hash: txHash,
       held_back_reason: heldBack,
       model: MODEL,
+      // What it actually read, recorded beside the ruling. The photographs are in the log
+      // too, and a reader who saw them next to a verdict would otherwise assume they were
+      // weighed.
+      evidence_seen: "statements and conversation",
     },
     { onConflict: "onchain_rental_id" }
   );

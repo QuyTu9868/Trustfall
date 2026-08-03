@@ -625,6 +625,23 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   thế được.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-03] Cắt bớt thứ agent đọc mà suýt để giao diện nói dối là nó vẫn đọc
+
+- **Chuyện gì xảy ra:** Trọng tài tranh chấp không chạy nổi trên free tier: hai lời khai
+  cộng log chat cộng 2 ảnh là ~8100 token, trần 8000. Đo đủ cách (hạ budget, rút ngắn
+  policy, ghép 2 ảnh làm 1 bằng jimp) đều không xuống dưới trần. Chốt: **bỏ ảnh khỏi lệnh
+  gọi model**, agent chỉ đọc chữ. Ảnh vẫn nộp, vẫn lưu, vẫn hiện cho hai bên và cho
+  `/admin`. Chỗ suýt sai là để nguyên màn hình cũ: ảnh nằm ngay cạnh phán quyết, người đọc
+  đương nhiên hiểu là agent đã nhìn ảnh rồi mới phán.
+- **Sai ở đâu:** Cắt năng lực vì giới hạn hạ tầng là quyết định đúng. Nhưng giao diện
+  không tự cập nhật theo, và một màn hình để người ta suy ra sai còn tệ hơn màn hình thiếu
+  thông tin, nhất là khi cái đang chia là tiền cọc của họ.
+- **Luật rút ra:** Cắt bớt thứ agent được đọc thì **phải ghi lại đã đọc gì** cạnh phán
+  quyết (ở đây là cột `evidence_seen`), và sửa mọi câu chữ trong UI đang ngụ ý điều
+  ngược lại. Khi giới hạn ép phải chọn, cắt **năng lực**, đừng cắt **lớp chặn**: ngưỡng
+  confidence, server ký, contract tự tính tiền giữ nguyên hết.
+- **Skill đích:** `agentic-engineering`
+
 ### [2026-08-01] Viết ca test từ tưởng tượng, bản thật khó hơn đúng chỗ quyết định
 
 - **Chuyện gì xảy ra:** Hàm đọc kết quả của model cắt từ dấu `{` đầu tới `}` cuối. Tự nghĩ
