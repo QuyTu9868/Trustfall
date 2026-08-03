@@ -625,6 +625,37 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   thế được.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-03] Đổi hình dạng request gửi model, quên hai thứ đã chỉnh theo hình dạng cũ
+
+- **Chuyện gì xảy ra:** Bỏ ảnh khỏi lệnh gọi trọng tài. Hai thứ ăn theo ảnh vẫn nằm
+  nguyên. Một: system prompt vẫn ghi "bạn sẽ thấy một ảnh từ mỗi bên" và "ảnh cho thấy đồ
+  nguyên vẹn thì thắng lời khai", tức bảo model rằng nó có thứ nó không có, và nó sẽ bịa
+  ra. Hai: trần `max_completion_tokens` 2816 là con số tính cho lúc còn phải trả tiền cho
+  2 ảnh; bỏ ảnh rồi thì nó thành quá chặt, vụ tranh chấp thật đứt giữa chừng ngay lần chạy
+  đầu tiên.
+- **Sai ở đâu:** Coi "bỏ ảnh" là một sửa đổi ở một chỗ. Thật ra nó là đổi **hình dạng
+  request**, mà quanh hình dạng đó có mấy thứ đã được chỉnh theo. Không compiler nào bắt
+  được: prompt chỉ là chuỗi chữ, hằng số token chỉ là một con số hợp lệ.
+- **Luật rút ra:** Đổi thứ agent **nhận** thì phải quét lại (a) system prompt, từng câu mô
+  tả đầu vào, và (b) mọi hằng số đã đo theo hình dạng cũ. Prompt là code, chỉ khác ở chỗ
+  không được kiểm kiểu, nên nó phải nằm trong danh sách file cần sửa chứ không phải chờ
+  nhớ ra.
+- **Skill đích:** `agentic-engineering`
+
+### [2026-08-03] Commit kèm message mô tả hành vi mà cây code chưa có
+
+- **Chuyện gì xảy ra:** Commit với message nói trọng tài đã ngừng đọc ảnh, nhưng
+  `lib/arbitrate.ts` không có mặt trong danh sách file thay đổi của commit đó. Phần sửa
+  quan trọng nhất chưa vào cây code. Vẫn báo cáo là xong, vì `tsc` và `eslint` xanh, mà
+  hai thứ đó xanh dù có sửa hay không.
+- **Sai ở đâu:** Lấy "build xanh" làm bằng chứng cho "đã sửa". Chúng trả lời hai câu hỏi
+  khác nhau: build xanh nói code hợp lệ, không nói code làm đúng thứ mình vừa hứa.
+- **Luật rút ra:** Trước khi commit, đọc `git diff --stat` và **đối chiếu với danh sách
+  file mình định sửa**. File đáng lẽ phải có mặt mà vắng là việc chưa làm, không phải việc
+  không cần làm. Cùng họ với entry "báo đã sửa bố cục sau khi chỉ xem trạng thái tình cờ
+  chạy đúng".
+- **Skill đích:** `code-change-workflow`
+
 ### [2026-08-03] Cắt bớt thứ agent đọc mà suýt để giao diện nói dối là nó vẫn đọc
 
 - **Chuyện gì xảy ra:** Trọng tài tranh chấp không chạy nổi trên free tier: hai lời khai
