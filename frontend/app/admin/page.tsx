@@ -57,9 +57,16 @@ export default function AdminPage() {
         }
         const result = await response.json();
         setLocked(false);
+        // An error body has no verdicts key, and assigning undefined used to render an
+        // entirely blank page: not the list, not the empty state, not even the spinner,
+        // because undefined matches none of those three checks. A page that says nothing
+        // reads as "the agent has done nothing", which is the one thing it did not mean.
+        if (!Array.isArray(result.verdicts)) {
+          throw new Error(result.error ?? "The log could not be read.");
+        }
         setVerdicts(result.verdicts as Verdict[]);
-      } catch {
-        // Leaves it locked, which is the safe way to be wrong.
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "The log could not be read.");
       }
     })();
     return () => {
@@ -135,7 +142,12 @@ export default function AdminPage() {
         </button>
       </header>
 
-      {verdicts === null && <p className="text-sm text-ink-muted">Loading...</p>}
+      {error && (
+        <p className="rounded-card border border-stop-ink/30 bg-stop-bg/40 p-4 text-sm text-stop-ink">
+          {error}
+        </p>
+      )}
+      {verdicts === null && !error && <p className="text-sm text-ink-muted">Loading...</p>}
       {verdicts?.length === 0 && (
         <p className="text-sm text-ink-muted">No disputes have been judged yet.</p>
       )}

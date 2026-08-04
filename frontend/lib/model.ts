@@ -15,27 +15,29 @@ import "server-only";
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /**
- * Two models, chosen by how often each job runs rather than by how hard it is.
+ * One model for both agents, and it is the one with an allowance rather than the clever one.
  *
  * Google's free tier caps requests per day per model, and the numbers are not close: every
- * model on the account allows 20 a day except flash-lite, which allows 500. Measured on
- * 2026-08-03 from the account's own rate limit page, after a single test run exhausted a
- * day of the good model in one sitting.
+ * model on this account allows 20 a day except flash-lite, which allows 500. Read from the
+ * account's own rate limit page on 2026-08-04.
  *
- * So the split follows the traffic. Checking a listing happens on every publish, which is
- * tens of calls while seeding demo data, and it goes where the allowance is. Judging a
- * dispute happens a handful of times ever, so it gets the stronger model and its own
- * separate 20 a day, which the listing checks can no longer eat into.
+ * The first arrangement here gave the arbitrator the stronger model, on the grounds that
+ * disputes are rare and deserve the better judgement. Twenty a day did not survive contact:
+ * seeding three demo disputes exhausted it, twice, and a model that cannot be called is
+ * not a better model. Flash-lite scored 37 out of 37 on the listing suite including the
+ * cases with photographs, so the loss is smaller than the constraint.
  *
- * Both are generally available. CLAUDE.md section 6 rules out anything named preview, and
- * both names came from the model list Google returned rather than from memory.
+ * Switching the arbitrator back for a live demo is one line, and worth doing on the day.
+ *
+ * Generally available, not preview, which CLAUDE.md section 6 requires. The name came from
+ * the model list Google returned rather than from memory.
  */
 export const MODERATION_MODEL = "gemini-3.5-flash-lite";
-export const ARBITRATION_MODEL = "gemini-3.6-flash";
+export const ARBITRATION_MODEL = "gemini-3.5-flash-lite";
 
-// Requests a minute, from the same page: 15 for flash-lite, 5 for the arbitration model.
-// Not a constant here because nothing in the app paces itself; the retry above handles a
-// busy minute, and only the test suites space their calls out deliberately.
+// Fifteen requests a minute alongside the 500 a day, from the same page. Not a constant
+// because nothing in the app paces itself: the retry below rides out a busy minute, and
+// only the test suites space their calls deliberately.
 
 export class ModelUnavailable extends Error {}
 
@@ -54,9 +56,8 @@ const MAX_OUTPUT_TOKENS = 8192;
  * Waiting out a busy minute rather than failing, with a cap so nothing hangs on a spinner.
  *
  * The first delay is thirteen seconds and not eight for a reason worth writing down: a
- * retry is itself a request and counts against the same allowance. The arbitration model
- * permits five a minute, which is one every twelve seconds, so retrying faster than that
- * spends the allowance it is waiting for and turns one busy minute into four.
+ * retry is itself a request and counts against the same allowance, so retrying faster than
+ * the limit allows spends the very thing it is waiting for.
  */
 const RETRY_DELAYS_MS = [13_000, 25_000, 40_000];
 const MAX_WAIT_MS = 45_000;
@@ -71,7 +72,8 @@ export type Ask = {
   system: string;
   text: string;
   images: string[];
-  /** Which of the two, and therefore which daily allowance this spends. */
+  /** Named per call rather than read from a constant, so a demo can point one agent
+   * somewhere else for an afternoon without touching the other. */
   model: string;
 };
 

@@ -96,7 +96,7 @@ export async function resolveDispute(rentalId: bigint) {
     }
   }
 
-  await supabase.from("dispute_verdicts").upsert(
+  const { error: logError } = await supabase.from("dispute_verdicts").upsert(
     {
       onchain_rental_id: Number(rentalId),
       verdict: verdict.verdict,
@@ -116,6 +116,17 @@ export async function resolveDispute(rentalId: bigint) {
     },
     { onConflict: "onchain_rental_id" }
   );
+
+  // Loud, because of what silence costs here. This write failed once for a missing column
+  // and nobody noticed: the arbitrator had ruled, the server had signed, a deposit had
+  // moved on chain, and the only record of why was the one that did not get written. The
+  // money is already gone by this line, so throwing cannot undo it, but it does stop the
+  // caller reporting success on a decision nothing can now explain.
+  if (logError) {
+    throw new Error(
+      `Rental #${rentalId} was decided${signed ? " and signed" : ""} but the verdict could not be recorded: ${logError.message}`
+    );
+  }
 
   return { ...verdict, signed, txHash, heldBack };
 }

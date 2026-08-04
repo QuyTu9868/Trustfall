@@ -1,14 +1,14 @@
 -- 007: record what the arbitrator actually looked at
 --
--- Photographs are filed, stored and shown to both parties and to the admin log, but they
--- are not sent to the model: a two photo dispute does not fit inside the free tier's per
--- minute allowance, measured every way there is. The verdict therefore comes from the
--- statements and the conversation alone.
+-- The arbitrator is sent the statements, the conversation, and the photographs both sides
+-- filed. It has not always been: for a while the pictures were withheld because a two photo
+-- dispute did not fit inside the previous provider's per minute allowance, and a photograph
+-- that fails to download is still withheld today.
 --
--- That has to be written down next to the verdict rather than known by whoever configured
--- it. A log that shows the photographs beside a ruling, without saying the ruling was
--- reached without them, is a record that misleads precisely the person reading it to find
--- out how a decision about somebody's deposit was made.
+-- What it read has to be written down next to the ruling rather than known by whoever
+-- configured it. A log that shows photographs beside a verdict, without saying whether that
+-- verdict was reached with them, misleads precisely the person reading it to find out how a
+-- decision about somebody's deposit was made.
 
 begin;
 
