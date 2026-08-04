@@ -625,6 +625,24 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   thế được.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-04] Thử lại một lỗi không bao giờ tự hết, và mỗi lần thử lại tốn thêm quota
+
+- **Chuyện gì xảy ra:** Hàm gọi model gặp 429 thì chờ rồi thử lại 3 lần. Provider cũ chặn
+  theo phút nên chờ là đúng. Provider mới chặn theo **ngày**, mà mỗi lần thử lại vẫn tính
+  là một request. Một lời gọi hỏng đốt 4 trong tổng số 20 lượt cả ngày, và không lần nào
+  có cơ hội thành công. Hai lời gọi hỏng là mất 40% hạn mức, trước khi kịp nhận ra.
+- **Sai ở đâu:** File cũ `groq.ts` **đã có** phân biệt "hết token phút, chờ là xong" với
+  "request quá lớn, chờ vô ích". Lúc viết `model.ts` mình chép phần chờ mà làm rơi phần
+  phân biệt. Viết lại một file thì phần dễ mất nhất là phần đã học được từ đau thương, vì
+  nó trông như một nhánh `if` thừa.
+- **Luật rút ra:** Trước khi thử lại bất kỳ lỗi hạn mức nào, hỏi hai câu: **chờ thì nó có
+  tự hết không**, và **lần thử lại có tốn thêm hạn mức không**. Trả lời "không" và "có" thì
+  phải hỏng ngay kèm câu giải thích, đừng thử lại. Với Gemini, nhận diện bằng `quotaId` có
+  chữ `PerDay`.
+- **Khi viết lại một module:** đọc bản cũ tìm những nhánh trông có vẻ thừa và hỏi vì sao
+  chúng ở đó, trước khi bỏ. Comment trong bản cũ chính là câu trả lời.
+- **Skill đích:** `agentic-engineering`
+
 ### [2026-08-03] Chọn model theo độ thông minh, quên hỏi trần dùng mỗi ngày
 
 - **Chuyện gì xảy ra:** Đổi từ Groq sang Gemini, chọn `gemini-3.6-flash` vì nó mới nhất và

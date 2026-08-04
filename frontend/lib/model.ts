@@ -50,8 +50,15 @@ export class ModelUnavailable extends Error {}
  */
 const MAX_OUTPUT_TOKENS = 8192;
 
-/** Waiting out a busy minute rather than failing, with a cap so nothing hangs on a spinner. */
-const RETRY_DELAYS_MS = [8_000, 20_000, 35_000];
+/**
+ * Waiting out a busy minute rather than failing, with a cap so nothing hangs on a spinner.
+ *
+ * The first delay is thirteen seconds and not eight for a reason worth writing down: a
+ * retry is itself a request and counts against the same allowance. The arbitration model
+ * permits five a minute, which is one every twelve seconds, so retrying faster than that
+ * spends the allowance it is waiting for and turns one busy minute into four.
+ */
+const RETRY_DELAYS_MS = [13_000, 25_000, 40_000];
 const MAX_WAIT_MS = 45_000;
 
 class RateLimited extends Error {
@@ -131,7 +138,17 @@ async function once(input: Ask) {
   if (response.status === 503) throw new RateLimited(null);
 
   if (response.status === 429) {
-    throw new RateLimited(retryAfterMs(await response.text()));
+    const body = await response.text();
+    // Two different things share this status, and treating them alike is expensive. Out of
+    // requests for the minute clears by itself. Out of requests for the day does not, and
+    // every retry against it is another request off tomorrow's allowance: four attempts
+    // spend a fifth of a day's twenty to learn something the first reply already said.
+    if (/PerDay/i.test(body)) {
+      throw new ModelUnavailable(
+        `Today's allowance for ${input.model} is used up. It resets at midnight Pacific.`
+      );
+    }
+    throw new RateLimited(retryAfterMs(body));
   }
 
   if (!response.ok) {
