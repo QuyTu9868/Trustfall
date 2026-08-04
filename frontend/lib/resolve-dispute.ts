@@ -102,6 +102,7 @@ export async function resolveDispute(rentalId: bigint) {
       verdict: verdict.verdict,
       confidence: verdict.confidence,
       reason: verdict.reason,
+      findings: verdict.findings,
       signed,
       tx_hash: txHash,
       held_back_reason: heldBack,

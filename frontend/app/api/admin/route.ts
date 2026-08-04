@@ -11,66 +11,103 @@ import { verifyCode } from "@/lib/totp";
  * a human resolver and that power lives in a wallet key, not behind a web form. This is
  * for reading what an automated system did with somebody's deposit, which is the thing
  * that has to be answerable afterwards.
+ *
+ * Two shapes. Without rentalId it answers with the list, and deliberately without the
+ * statements, photographs or conversation: a hundred rulings would mean a hundred signed
+ * photo URLs generated so that a reader could look at one of them. With rentalId it answers
+ * with everything about that single dispute.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     if (!(await hasAdminSession())) {
       return NextResponse.json({ error: "Not signed in." }, { status: 401 });
     }
 
-    const supabase = getSupabaseAdmin();
-
-    const { data, error } = await supabase
-      .from("dispute_verdicts")
-      .select(
-        "onchain_rental_id, verdict, confidence, reason, signed, tx_hash, held_back_reason, model, evidence_seen, created_at"
-      )
-      .order("created_at", { ascending: false })
-      .limit(100);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    // Everything that was filed, beside every ruling. The photographs did not go to the
-    // model, and evidence_seen says so, but they are the material a person reviewing this
-    // would want most: it is the only way to tell whether the ruling was reasonable.
-    const ids = (data ?? []).map((row) => row.onchain_rental_id);
-    const { data: evidence } = ids.length
-      ? await supabase
-          .from("dispute_evidence")
-          .select("onchain_rental_id, side, statement, image_path, created_at")
-          .in("onchain_rental_id", ids)
-          .order("created_at")
-      : { data: [] };
-
-    const paths = (evidence ?? [])
-      .map((row) => row.image_path)
-      .filter((path): path is string => Boolean(path));
-    const links = new Map<string, string>();
-    if (paths.length) {
-      const { data: signed } = await supabase.storage
-        .from(DISPUTE_EVIDENCE_BUCKET)
-        .createSignedUrls(paths, 60 * 60);
-      for (const entry of signed ?? []) {
-        if (entry.path && entry.signedUrl) links.set(entry.path, entry.signedUrl);
-      }
-    }
-
-    return NextResponse.json({
-      verdicts: (data ?? []).map((row) => ({
-        ...row,
-        evidence: (evidence ?? [])
-          .filter((entry) => entry.onchain_rental_id === row.onchain_rental_id)
-          .map((entry) => ({
-            side: entry.side,
-            statement: entry.statement,
-            created_at: entry.created_at,
-            image_url: entry.image_path ? (links.get(entry.image_path) ?? null) : null,
-          })),
-      })),
-    });
+    const rentalId = new URL(request.url).searchParams.get("rentalId");
+    return rentalId ? await one(Number(rentalId)) : await list();
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+const COLUMNS =
+  "onchain_rental_id, verdict, confidence, reason, signed, tx_hash, held_back_reason, model, evidence_seen, findings, created_at";
+
+async function list() {
+  const { data, error } = await getSupabaseAdmin()
+    .from("dispute_verdicts")
+    .select(COLUMNS)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ verdicts: data ?? [] });
+}
+
+async function one(rentalId: number) {
+  if (!Number.isInteger(rentalId) || rentalId < 1) {
+    return NextResponse.json({ error: "That is not a rental id." }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdmin();
+
+  const { data: verdict, error } = await supabase
+    .from("dispute_verdicts")
+    .select(COLUMNS)
+    .eq("onchain_rental_id", rentalId)
+    .maybeSingle();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!verdict) {
+    return NextResponse.json({ error: "No verdict for that rental." }, { status: 404 });
+  }
+
+  // Everything that was filed, beside the ruling. Photographs are shown whether or not the
+  // arbitrator was given them, because they are how a reader judges whether the ruling was
+  // reasonable. evidence_seen on the verdict is what says which it was.
+  const { data: evidence } = await supabase
+    .from("dispute_evidence")
+    .select("side, statement, image_path, created_at")
+    .eq("onchain_rental_id", rentalId)
+    .order("created_at");
+
+  // The conversation, because findings cite it and a citation nobody can check is not
+  // evidence of anything.
+  const { data: chat } = await supabase
+    .from("messages")
+    .select("sender_address, body, created_at")
+    .eq("onchain_rental_id", rentalId)
+    .order("created_at");
+
+  const paths = (evidence ?? [])
+    .map((row) => row.image_path)
+    .filter((path): path is string => Boolean(path));
+  const links = new Map<string, string>();
+  if (paths.length) {
+    const { data: signed } = await supabase.storage
+      .from(DISPUTE_EVIDENCE_BUCKET)
+      .createSignedUrls(paths, 60 * 60);
+    for (const entry of signed ?? []) {
+      if (entry.path && entry.signedUrl) links.set(entry.path, entry.signedUrl);
+    }
+  }
+
+  return NextResponse.json({
+    verdict,
+    evidence: (evidence ?? []).map((entry) => ({
+      side: entry.side,
+      statement: entry.statement,
+      created_at: entry.created_at,
+      image_url: entry.image_path ? (links.get(entry.image_path) ?? null) : null,
+    })),
+    chat: (chat ?? [])
+      .filter((line) => line.body)
+      .map((line) => ({
+        sender_address: line.sender_address,
+        body: line.body,
+        created_at: line.created_at,
+      })),
+  });
 }
 
 /** Six digits from an authenticator app, exchanged for a session. */

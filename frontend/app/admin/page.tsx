@@ -1,34 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-
-type Verdict = {
-  onchain_rental_id: number;
-  verdict: "refund_renter" | "split" | "pay_owner";
-  confidence: number;
-  reason: string;
-  signed: boolean;
-  tx_hash: string | null;
-  held_back_reason: string | null;
-  model: string;
-  evidence_seen: string;
-  created_at: string;
-  evidence: {
-    side: "owner" | "renter";
-    statement: string;
-    image_url: string | null;
-    created_at: string;
-  }[];
-};
-
-const OUTCOME: Record<Verdict["verdict"], string> = {
-  refund_renter: "deposit to the renter",
-  split: "deposit split",
-  pay_owner: "deposit to the owner",
-};
+import { OUTCOME, type Verdict } from "@/lib/admin-view";
 
 /**
- * What the arbitrator decided, and whether the server acted on it.
+ * Every ruling the arbitrator reached, one line each.
+ *
+ * A table rather than a stack of cards, because the question this page answers is "what has
+ * it been doing", and that is a question about the shape of a hundred rows: how often it is
+ * sure, how often the server declined to act, whether one outcome dominates. The evidence
+ * behind any single ruling is a click away rather than in the way.
  *
  * Read only, deliberately. The contract already has a human resolver and that power lives
  * in a wallet key, not behind a web form: a page that could move a deposit would be a page
@@ -59,7 +41,7 @@ export default function AdminPage() {
         setLocked(false);
         // An error body has no verdicts key, and assigning undefined used to render an
         // entirely blank page: not the list, not the empty state, not even the spinner,
-        // because undefined matches none of those three checks. A page that says nothing
+        // because undefined matched none of those three checks. A page that says nothing
         // reads as "the agent has done nothing", which is the one thing it did not mean.
         if (!Array.isArray(result.verdicts)) {
           throw new Error(result.error ?? "The log could not be read.");
@@ -98,9 +80,7 @@ export default function AdminPage() {
     return (
       <main className="flex max-w-sm flex-col gap-4">
         <h1 className="text-3xl">Admin</h1>
-        <p className="text-sm text-ink-muted">
-          Six digits from your authenticator app.
-        </p>
+        <p className="text-sm text-ink-muted">Six digits from your authenticator app.</p>
         <input
           value={code}
           onChange={(event) => setCode(event.target.value)}
@@ -122,13 +102,17 @@ export default function AdminPage() {
     );
   }
 
+  const held = verdicts?.filter((entry) => !entry.signed).length ?? 0;
+
   return (
-    <main className="flex max-w-[76rem] flex-col gap-6">
+    <main className="flex flex-col gap-6">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl">What the arbitrator did</h1>
           <p className="text-sm text-ink-muted">
-            Every verdict it reached, including the ones the server refused to act on.
+            {verdicts
+              ? `${verdicts.length} ruling${verdicts.length === 1 ? "" : "s"}, ${held} the server refused to act on.`
+              : "Every verdict it reached, including the ones the server refused to act on."}
           </p>
         </div>
         <button
@@ -152,76 +136,53 @@ export default function AdminPage() {
         <p className="text-sm text-ink-muted">No disputes have been judged yet.</p>
       )}
 
-      {verdicts?.map((entry) => (
-        <article
-          key={entry.onchain_rental_id}
-          className="flex flex-col gap-2 rounded-card border border-line bg-surface p-5"
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <span className="flex items-center gap-3">
-              <span className="tabular text-sm">Rental #{entry.onchain_rental_id}</span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
-                  entry.signed ? "bg-live-bg text-live-ink" : "bg-pend-bg text-pend-ink"
-                }`}
-              >
-                {entry.signed ? "applied" : "held back"}
-              </span>
-            </span>
-            <span className="tabular text-xs text-ink-muted">
-              {new Date(entry.created_at).toLocaleString()}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
-            <span>{OUTCOME[entry.verdict]}</span>
-            <span className="tabular text-xs text-ink-muted">
-              confidence {entry.confidence} · {entry.model}
-            </span>
-          </div>
-
-          <p className="text-sm text-ink-muted">{entry.reason}</p>
-
-          {/* What it read, said plainly. The photographs are below, and a reader seeing
-              them next to a ruling would otherwise assume they were weighed. */}
-          <p className="text-xs text-pend-ink">
-            Reached from {entry.evidence_seen}. Anything not named there was filed but not
-            put in front of the model.
-          </p>
-
-          {entry.evidence.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {entry.evidence.map((filed) => (
-                <div
-                  key={filed.side}
-                  className="flex flex-col gap-2 rounded-card border border-line bg-canvas p-3"
-                >
-                  <span className="text-xs text-ink-muted">
-                    The {filed.side}, {new Date(filed.created_at).toLocaleString()}
-                  </span>
-                  <p className="text-sm whitespace-pre-wrap break-words">{filed.statement}</p>
-                  {filed.image_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={filed.image_url}
-                      alt={`Filed by the ${filed.side}`}
-                      className="max-h-64 w-full rounded-card object-contain"
-                    />
-                  )}
-                </div>
+      {verdicts && verdicts.length > 0 && (
+        <div className="overflow-x-auto rounded-card border border-line bg-surface">
+          <table className="w-full min-w-[46rem] text-sm">
+            <thead className="border-b border-line text-left text-xs text-ink-muted">
+              <tr>
+                <th className="px-4 py-3 font-normal">Rental</th>
+                <th className="px-4 py-3 font-normal">Outcome</th>
+                <th className="px-4 py-3 font-normal">Confidence</th>
+                <th className="px-4 py-3 font-normal">Acted on</th>
+                <th className="px-4 py-3 font-normal">Reason</th>
+                <th className="px-4 py-3 font-normal">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {verdicts.map((entry) => (
+                <tr key={entry.onchain_rental_id} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3">
+                    {/* The link is on the id rather than on the whole row, which would make
+                        selecting the reason text impossible. */}
+                    <Link
+                      href={`/admin/${entry.onchain_rental_id}`}
+                      className="tabular underline decoration-line underline-offset-4"
+                    >
+                      #{entry.onchain_rental_id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">{OUTCOME[entry.verdict]}</td>
+                  <td className="tabular px-4 py-3">{entry.confidence.toFixed(2)}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
+                        entry.signed ? "bg-live-bg text-live-ink" : "bg-pend-bg text-pend-ink"
+                      }`}
+                    >
+                      {entry.signed ? "applied" : "held back"}
+                    </span>
+                  </td>
+                  <td className="max-w-md px-4 py-3 text-ink-muted">{entry.reason}</td>
+                  <td className="tabular px-4 py-3 text-xs text-ink-muted">
+                    {new Date(entry.created_at).toLocaleString()}
+                  </td>
+                </tr>
               ))}
-            </div>
-          )}
-
-          {/* The two facts that matter most to somebody auditing this: whether money
-              actually moved, and if not, why the server declined to move it. */}
-          {entry.signed ? (
-            <span className="tabular text-[11px] break-all text-live-ink">{entry.tx_hash}</span>
-          ) : (
-            <span className="text-xs text-pend-ink">{entry.held_back_reason}</span>
-          )}
-        </article>
-      ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </main>
   );
 }

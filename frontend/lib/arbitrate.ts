@@ -14,6 +14,20 @@ export type DisputeVerdict = {
   verdict: "refund_renter" | "split" | "pay_owner";
   confidence: number;
   reason: string;
+  /**
+   * What it read, and where each thing came from.
+   *
+   * The one sentence reason is for the two people involved. This is for whoever audits the
+   * agent later: every entry names its source, so a claim can be checked against the thing
+   * it claims to come from. An entry citing a photograph on a dispute where none was filed
+   * is a hallucination the log catches by itself.
+   */
+  findings: Finding[];
+};
+
+export type Finding = {
+  from: string;
+  says: string;
 };
 
 /**
@@ -54,8 +68,17 @@ Neither party is more trustworthy than the other by default. The owner wrote the
 the renter paid for it. Both have a reason to shade the truth.
 
 Answer with JSON only:
-{"verdict":"refund_renter"|"split"|"pay_owner","confidence":0.0,"reason":"one sentence a
-person who lost would still find fair"}
+{"findings":[{"from":"...","says":"..."}],
+ "verdict":"refund_renter"|"split"|"pay_owner",
+ "confidence":0.0,
+ "reason":"one sentence a person who lost would still find fair"}
+
+findings comes first because it is the working, not the summary: two to five entries, each
+one thing you actually read that changed your mind. "from" must name where it came from and
+must be exactly one of: "owner statement", "renter statement", "conversation", "owner
+photo", "renter photo". Never cite a source you were not given. "says" is one short sentence
+in your own words.
+
 Confidence is how sure you are, from 0 to 1. Be honest with it: below 0.6 the decision is
 handed to a human instead, which is the right outcome when the evidence does not settle it.`;
 
@@ -110,7 +133,7 @@ export function readVerdict(answer: string): DisputeVerdict {
   const objects = balancedObjects(answer);
 
   for (let i = objects.length - 1; i >= 0; i--) {
-    let parsed: { verdict?: unknown; confidence?: unknown; reason?: unknown };
+    let parsed: { verdict?: unknown; confidence?: unknown; reason?: unknown; findings?: unknown };
     try {
       parsed = JSON.parse(objects[i]);
     } catch {
@@ -131,10 +154,29 @@ export function readVerdict(answer: string): DisputeVerdict {
       // a human. Assuming it meant to be sure would be the one guess with real cost.
       confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,
       reason: reason || "The arbitrator gave no reason.",
+      // Missing working is not a missing verdict. Requiring it would throw away a sound
+      // decision over its paperwork, and the empty list says plainly that none was given.
+      findings: readFindings(parsed.findings),
     };
   }
 
   throw new Error("The arbitrator's answer could not be read.");
+}
+
+/** Whatever survives of the working: entries with both halves, capped so one long answer
+ * cannot fill the log. */
+function readFindings(value: unknown): Finding[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (entry): entry is { from: string; says: string } =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof (entry as { from?: unknown }).from === "string" &&
+        typeof (entry as { says?: unknown }).says === "string"
+    )
+    .slice(0, 8)
+    .map((entry) => ({ from: entry.from.trim().slice(0, 40), says: entry.says.trim().slice(0, 300) }));
 }
 
 /** Every top level {...}, brace counted so a reason containing a brace does not break it. */
