@@ -76,8 +76,17 @@ Answer with JSON only:
 findings comes first because it is the working, not the summary: two to five entries, each
 one thing you actually read that changed your mind. "from" must name where it came from and
 must be exactly one of: "owner statement", "renter statement", "conversation", "owner
-photo", "renter photo". Never cite a source you were not given. "says" is one short sentence
-in your own words.
+photo", "renter photo".
+
+Two rules about "from", and they matter more than the verdict:
+- Only name a source that was actually given to you above. If a photograph or a
+  conversation is missing, that belongs in "reason", never as a finding. A finding naming a
+  source that does not exist is worse than no finding at all.
+- If photographs were given to you, at least one finding must come from one, describing
+  what you can see in it. Photographs are the only evidence here that nobody wrote after
+  the argument started.
+
+"says" is one short sentence in your own words.
 
 Confidence is how sure you are, from 0 to 1. Be honest with it: below 0.6 the decision is
 handed to a human instead, which is the right outcome when the evidence does not settle it.`;

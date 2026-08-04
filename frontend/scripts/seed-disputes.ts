@@ -12,6 +12,7 @@
  * Uses the wallets in .env.test so the rentals also show up in the app under the accounts
  * the user signs in with. Their keys are read, never printed.
  */
+import { Jimp } from "jimp";
 import { createPublicClient, createWalletClient, http, parseUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
@@ -26,7 +27,7 @@ import {
 } from "../lib/escrow";
 import { HANDOVER_PRIMARY, HANDOVER_TYPES } from "../lib/handover";
 import { resolveDispute } from "../lib/resolve-dispute";
-import { getSupabaseAdmin } from "../lib/supabase-server";
+import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "../lib/supabase-server";
 
 const RPC = "http://127.0.0.1:8545";
 const pub = createPublicClient({ chain: hardhat, transport: http(RPC) });
@@ -41,7 +42,47 @@ type Case = {
   renterSays: string;
   chat: { from: "owner" | "renter"; body: string }[];
   expect: string;
+  /** What each side's photograph shows, so the two disagree the way real ones do. */
+  photos?: { owner: "damaged" | "clean"; renter: "damaged" | "clean" };
 };
+
+/**
+ * A panel, with or without a gouge across it.
+ *
+ * Drawn rather than photographed because the point is that the two sides file pictures that
+ * disagree, and a pair of stock photos would either both look fine or both look broken. A
+ * dark diagonal on a flat panel is something a model can describe without being told, which
+ * is what makes a finding attributed to a photograph checkable.
+ */
+async function panel(kind: "damaged" | "clean") {
+  const width = 640;
+  const height = 420;
+  const image = new Jimp({ width, height, color: 0xb9c0c7ff });
+
+  // A seam and a wheel arch, so it reads as a body panel rather than as a grey rectangle.
+  for (let x = 40; x < width - 40; x++) image.setPixelColor(0x8f979eff, x, 300);
+  for (let angle = 200; angle <= 340; angle++) {
+    const radians = (angle * Math.PI) / 180;
+    const cx = 470;
+    const cy = 360;
+    for (let r = 78; r < 82; r++) {
+      const x = Math.round(cx + r * Math.cos(radians));
+      const y = Math.round(cy + r * Math.sin(radians));
+      if (x >= 0 && x < width && y >= 0 && y < height) image.setPixelColor(0x6b7278ff, x, y);
+    }
+  }
+
+  if (kind === "damaged") {
+    // Thick enough to survive the resize a model does before it looks at anything.
+    for (let t = 0; t < 260; t++) {
+      const x = 150 + t;
+      const y = 120 + Math.round(t * 0.45);
+      for (let w = -3; w <= 3; w++) image.setPixelColor(0x2b2f33ff, x, y + w);
+    }
+  }
+
+  return Buffer.from(await image.getBuffer("image/jpeg", { quality: 80 }));
+}
 
 const CASES: Case[] = [
   {
@@ -60,6 +101,9 @@ const CASES: Case[] = [
       { from: "owner", body: "Actually hold on, is that a scratch on the side? I only noticed now." },
     ],
     expect: "deposit back to the renter",
+    // The owner claims a scratch and files a photograph of an unmarked panel. Both
+    // photographs agree with the renter, which is the case worth being able to see.
+    photos: { owner: "clean", renter: "clean" },
   },
   {
     title: "Canon EOS R6 with 24-70mm",
@@ -77,6 +121,7 @@ const CASES: Case[] = [
       { from: "renter", body: "It slipped off the table. I will pay for what it costs." },
     ],
     expect: "the owner keeps the deposit",
+    photos: { owner: "damaged", renter: "damaged" },
   },
   {
     title: "Studio apartment near Ben Thanh",
@@ -318,6 +363,23 @@ async function main() {
       if (chatError) throw new Error(`chat insert failed: ${chatError.message}`);
     }
 
+    // Same bucket and the same {rentalId}/{side}.jpg path the real route writes, so what
+    // the arbitrator loads here is loaded exactly the way it is in the app.
+    const paths: Record<"owner" | "renter", string | null> = { owner: null, renter: null };
+    if (item.photos) {
+      for (const side of ["owner", "renter"] as const) {
+        const path = `${id}/${side}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from(DISPUTE_EVIDENCE_BUCKET)
+          .upload(path, await panel(item.photos[side]), {
+            contentType: "image/jpeg",
+            upsert: true,
+          });
+        if (uploadError) throw new Error(`photo upload failed: ${uploadError.message}`);
+        paths[side] = path;
+      }
+    }
+
     // Checked rather than assumed. An insert that fails here returns an error object and
     // carries on, and the first sign of it is the arbitrator saying nobody filed anything,
     // which reads like a bug in the arbitrator.
@@ -327,12 +389,14 @@ async function main() {
         side: "owner",
         author_address: owner.address.toLowerCase(),
         statement: item.ownerSays,
+        image_path: paths.owner,
       },
       {
         onchain_rental_id: Number(id),
         side: "renter",
         author_address: renter.address.toLowerCase(),
         statement: item.renterSays,
+        image_path: paths.renter,
       },
     ]);
     if (evidenceError) throw new Error(`evidence insert failed: ${evidenceError.message}`);
