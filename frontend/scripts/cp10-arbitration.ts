@@ -2,14 +2,14 @@
  * Checkpoint 10: does the arbitrator reach the right one of three outcomes.
  *
  * Two halves, like the moderation suite. The first reads answers a model has actually
- * produced and costs nothing. The second sends real disputes to Groq.
+ * produced and costs nothing. The second sends real disputes to the model.
  *
  * The cases are written so that a coin toss cannot pass. Two of them are meant to end
  * below the confidence bar, and a suite where every case is decidable would never notice
  * an arbitrator that is confidently wrong.
  */
 import { MIN_CONFIDENCE, arbitrate, readVerdict } from "../lib/arbitrate";
-import { GroqUnavailable } from "../lib/groq";
+import { ModelUnavailable } from "../lib/model";
 
 let passed = 0;
 let failed = 0;
@@ -63,7 +63,20 @@ type Case = {
   renter: string;
   chat: { sender: "owner" | "renter"; body: string }[];
   expect: "refund_renter" | "split" | "pay_owner" | "below the bar";
+  /** Sends a photograph from each side, which is the shape a real dispute usually has. */
+  photos?: boolean;
 };
+
+/**
+ * Eight pixels square, and blank.
+ *
+ * A real photograph would make the case turn on what the model sees in it, which is not
+ * what these cases are testing. This one only proves the photographs reach the model at
+ * all: that the data URL is split correctly, that the request is accepted, and that two
+ * images plus this much text still fit inside a minute's allowance.
+ */
+const BLANK_PHOTO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFUlEQVR4nGM8ceIEAzbAhFV00EoAANcnAmjjOKqVAAAAAElFTkSuQmCC";
 
 /**
  * One dispute per outcome, plus two that should not be decided at all.
@@ -97,6 +110,7 @@ const CASES: Case[] = [
       { sender: "renter", body: "It slipped off the table. I will pay for what it costs." },
     ],
     expect: "pay_owner",
+    photos: true,
   },
   {
     what: "a dress with a stain both sides half own",
@@ -119,9 +133,9 @@ const CASES: Case[] = [
     expect: "below the bar",
   },
   {
-    what: "a case that turns on what a photo would show, which the arbitrator does not have",
-    owner: "The dent in the door is new. Compare the photos and you will see it.",
-    renter: "That dent is in his own listing photos. Look at them.",
+    what: "a case that turns on a photograph neither side filed",
+    owner: "The dent in the door is new. I would have noticed it when I handed the car over.",
+    renter: "That dent was there when I collected it. I did not photograph it, I was in a hurry.",
     chat: [{ sender: "renter", body: "Picking it up now." }],
     expect: "below the bar",
   },
@@ -147,19 +161,23 @@ const INJECTION: Case = {
 };
 
 /**
- * Statements plus a chat log come to roughly 1000 tokens of prompt, and the reply
- * reservation of 5120 is charged whether it is spent or not. That is about 6100 a
- * request against the free tier's 8000 a minute, so they go one at a time.
+ * Paced by requests a minute, not by tokens. A dispute with two photographs costs about
+ * 2450 tokens against 250,000 a minute, so tokens are not the constraint. The arbitration
+ * model allows five requests a minute, which is twelve seconds apart, plus a margin.
+ *
+ * The tighter cap is the daily one: twenty. A full run of this suite spends six of them,
+ * so it can be run three times a day and then not again until tomorrow.
  */
-const PACE_MS = 62_000;
+const PACE_MS = 13_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function toInput(dispute: Case) {
   const now = new Date().toISOString();
+  const photo = dispute.photos ? BLANK_PHOTO : null;
   return {
     evidence: [
-      { side: "owner" as const, statement: dispute.owner, submittedAt: now },
-      { side: "renter" as const, statement: dispute.renter, submittedAt: now },
+      { side: "owner" as const, statement: dispute.owner, imageDataUrl: photo, submittedAt: now },
+      { side: "renter" as const, statement: dispute.renter, imageDataUrl: photo, submittedAt: now },
     ],
     chat: dispute.chat.map((line) => ({ ...line, at: now })),
   };
@@ -183,23 +201,23 @@ async function main() {
     check(`  at confidence ${want.confidence}`, got.confidence === want.confidence, `got ${got.confidence}`);
   }
 
-  if (!process.env.GROQ_API_KEY) {
-    console.log("\nNo Groq key\n");
+  if (!process.env.GEMINI_API_KEY) {
+    console.log("\nNo Gemini key\n");
     let refused = false;
     let kind = "";
     try {
       await arbitrate(toInput(CASES[0]));
     } catch (error) {
       refused = true;
-      kind = error instanceof GroqUnavailable ? "GroqUnavailable" : "wrong type";
+      kind = error instanceof ModelUnavailable ? "ModelUnavailable" : "wrong type";
     }
     check("with no key, no verdict is reached", refused);
-    check("and it refuses with the type the route maps to 503", kind === "GroqUnavailable", kind);
-    console.log("\nAdd GROQ_API_KEY to frontend/.env.local to run the disputes.\n");
+    check("and it refuses with the type the route maps to 503", kind === "ModelUnavailable", kind);
+    console.log("\nAdd GEMINI_API_KEY to frontend/.env.local to run the disputes.\n");
     return finish();
   }
 
-  console.log("\nGroq key found, asking the real model\n");
+  console.log("\nGemini key found, asking the real model\n");
 
   for (const dispute of CASES) {
     const verdict = await arbitrate(toInput(dispute));
@@ -217,14 +235,18 @@ async function main() {
     // the one who has to accept it.
     check("    with a reason worth reading", verdict.reason.length > 25, verdict.reason);
 
-    // The model is not given the photographs. Claiming to have seen one means it is
-    // deciding from something it invented, which no confidence score would reveal.
-    check(
-      "    and does not claim to have seen a photo",
-      !/\b(photo|photograph|image|picture)\b/i.test(verdict.reason) ||
-        /\b(no|without|not|lack|absence)\b/i.test(verdict.reason),
-      verdict.reason
-    );
+    // A case with no photograph filed must not produce a reason that describes one. This
+    // used to guard against the arbitrator inventing evidence it was never sent; now that
+    // it does receive photographs, it guards the narrower and still real version: not
+    // claiming to have seen one where none was filed.
+    if (!dispute.photos) {
+      check(
+        "    and does not describe a photo nobody filed",
+        !/\b(photo|photograph|image|picture)\b/i.test(verdict.reason) ||
+          /\b(no|without|not|lack|absence|absent)\b/i.test(verdict.reason),
+        verdict.reason
+      );
+    }
 
     await sleep(PACE_MS);
   }

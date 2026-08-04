@@ -1,8 +1,8 @@
 import "server-only";
 import { targetChain } from "./chain";
-import { GroqUnavailable, MODEL, askGroq } from "./groq";
+import { MODERATION_MODEL, ModelUnavailable, askModel } from "./model";
 
-export { toDataUrls } from "./groq";
+export { toDataUrls } from "./model";
 
 /**
  * The listing moderator.
@@ -12,7 +12,7 @@ export { toDataUrls } from "./groq";
  * of something prohibited passes both halves, because each half only ever sees its own
  * side and each side on its own is unremarkable.
  *
- * CLAUDE.md section 6 named Llama Guard and Llama 4 Scout. Groq has since removed both,
+ * CLAUDE.md section 6 named Llama Guard and Llama 4 Scout, then qwen. The provider is Google now,
  * which is the rule about preview models proving itself. What is left in production and
  * can see an image is qwen3.6-27b, so that is what this uses. It is a general model
  * rather than a trained safety classifier, and the trade is deliberate: the one rule this
@@ -107,17 +107,24 @@ Description: ${input.description}
 </untrusted>`;
 
   try {
-    return readVerdict(await askGroq({ system: POLICY, text: untrusted, images: input.images }));
+    return readVerdict(
+      await askModel({
+        system: POLICY,
+        text: untrusted,
+        images: input.images,
+        model: MODERATION_MODEL,
+      })
+    );
   } catch (error) {
     // Reworded for the person publishing. They do not care which provider is busy, only
     // whether to rewrite their listing or wait.
-    if (error instanceof GroqUnavailable) throw new ModerationUnavailable(error.message);
+    if (error instanceof ModelUnavailable) throw new ModerationUnavailable(error.message);
     throw error;
   }
 }
 
 /** Named so the admin log can record which model reached a verdict. */
-export const MODERATION_MODEL = MODEL;
+export { MODERATION_MODEL } from "./model";
 
 /**
  * Turns whatever came back into a decision.

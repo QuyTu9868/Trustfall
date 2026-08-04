@@ -625,6 +625,26 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   thế được.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-03] Chọn model theo độ thông minh, quên hỏi trần dùng mỗi ngày
+
+- **Chuyện gì xảy ra:** Đổi từ Groq sang Gemini, chọn `gemini-3.6-flash` vì nó mới nhất và
+  không phải preview. Đo token thấy rất thoáng: 250.000 token mỗi phút, một vụ tranh chấp
+  kèm 2 ảnh chỉ tốn 2.450. Chạy hai bộ test thì đứt. Đọc kỹ lỗi 429 mới thấy trần bị đụng
+  không phải token mà là `GenerateRequestsPerDayPerProjectPerModel-FreeTier`, **limit: 20**.
+  Hai mươi request một **ngày**. Một lượt test đốt hết.
+- **Sai ở đâu:** Chỉ nhìn hạn mức theo phút vì đó là thứ provider cũ chặn mình. Nhà cung
+  cấp mới chặn bằng chiều khác hẳn, mà chiều đó không xuất hiện trong bất kỳ phép đo nào
+  đã chạy. Đo đúng thứ mình đã biết, không đo thứ mình chưa biết.
+- **Luật rút ra:** Trước khi chốt model trên free tier, mở **trang rate limit của chính
+  tài khoản** và đọc đủ ba con số RPM, TPM, RPD. Con số quyết định thường không phải con số
+  provider trước đã dạy mình để ý. Đọc nguyên văn `quotaId` trong lỗi 429, nó gọi thẳng tên
+  chiều bị đụng.
+- **Thứ nhặt được:** quota tính **theo từng model**, nên chia hai việc cho hai model là
+  nhân đôi hạn mức miễn phí. Ở đây mọi model đều 20/ngày trừ `gemini-3.5-flash-lite` được
+  500. Kiểm duyệt listing chạy nhiều nên đẩy sang flash-lite, xử tranh chấp chạy ít nên
+  giữ model khôn. Chia theo **tần suất**, không theo độ khó.
+- **Skill đích:** `agentic-engineering`
+
 ### [2026-08-03] Nội dung mặc định vô hình, chờ JavaScript bật lên mới thấy
 
 - **Chuyện gì xảy ra:** Hiệu ứng hiện dần ở trang landing viết bằng IntersectionObserver:

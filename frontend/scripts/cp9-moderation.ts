@@ -2,7 +2,7 @@
  * Checkpoint 9: does the moderator stop the right things and let the rest through.
  *
  * Two halves. The first reads answers the model has actually produced and costs nothing,
- * so it runs whether or not there is a key. The second sends twelve listings to Groq.
+ * so it runs whether or not there is a key. The second sends twelve listings to the model.
  *
  * The listings are not all hard, and they are not meant to be. A filter that rejects
  * everything scores full marks on the dirty ones, which is why the clean listings that
@@ -204,29 +204,23 @@ const INJECTION = {
 };
 
 /**
- * Groq's free tier allows 8000 tokens a minute and one check costs about 1250, so the run
- * has to pace itself or it dies two thirds of the way through with a rate limit. Slower
- * than it needs to be on a paid tier, and worth it for a suite that finishes.
- */
-/**
- * Text only listings cost about 300 tokens of prompt plus the 2048 the reply is allowed
- * to use, and that reservation is charged whether it is spent or not. Three a minute fit
- * inside the free tier's 8000, so they are spaced accordingly.
+ * Paced by requests a minute, not by tokens.
  *
- * The photo cases at the end are paced separately. Two photos come to roughly 7000 with
- * the reservation, which is one request per minute and no more.
+ * The previous provider allowed 8000 tokens a minute and charged the reply reservation
+ * whether it was spent or not, which put one photo check per minute and made this suite a
+ * quarter of an hour long. The limit that binds now is roughly ten requests a minute, so
+ * the spacing is six seconds plus a margin, and it applies equally to the photo cases.
  */
-const PACE_MS = 28_000;
-const PHOTO_PACE_MS = 70_000;
+const PACE_MS = 7_000;
+const PHOTO_PACE_MS = 7_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * A tiny image, sent as two photos with every listing.
+ * A tiny image, sent as two photos with the last two cases.
  *
- * Not decoration. A photo costs about 1800 tokens whatever its resolution, measured: the
- * same picture at 1187px and at 224px came to exactly the same number. So a real publish
- * costs roughly 5000 tokens, not the 1250 a text only check does, and a suite that skips
- * the photos measures a request the product never makes.
+ * Not decoration. A suite that skips the photographs measures a request the product never
+ * makes, which is how an earlier version of this reported six listings a minute for
+ * something that could manage one.
  *
  * Blank rather than a real photograph because what is being tested here is the policy and
  * the plumbing, and an empty image gives the model nothing to disagree about.
@@ -239,11 +233,9 @@ const BLANK_PHOTO =
 /**
  * The policy cases run without photos.
  *
- * Not a shortcut around the real shape of a request: two blank images tell the model
- * nothing about whether a description offers a weapon, and they cost enough that the
- * twelve of them would take a quarter of an hour on the free tier. A suite that long is a
- * suite nobody runs. The photo path gets its own two cases below, where it is the thing
- * being tested rather than dead weight.
+ * Two blank images tell the model nothing about whether a description offers a weapon, so
+ * they would be dead weight on all twelve. The photo path gets its own two cases at the
+ * end, where it is the thing being tested.
  */
 async function moderatePaced(input: { title: string; description: string }) {
   return moderateListing({ ...input, images: [] });
@@ -259,10 +251,10 @@ async function main() {
     }
   }
 
-  const hasKey = Boolean(process.env.GROQ_API_KEY);
+  const hasKey = Boolean(process.env.GEMINI_API_KEY);
 
   if (!hasKey) {
-    console.log("\nNo Groq key\n");
+    console.log("\nNo Gemini key\n");
     // Fail closed is the whole design. Getting this backwards means a moderation step
     // that quietly stops moderating the moment anything goes wrong with the provider.
     let refused = false;
@@ -275,11 +267,11 @@ async function main() {
     }
     check("with no key, a clean listing is refused rather than approved", refused);
     check("and it refuses with the type the routes map to 503", kind === "ModerationUnavailable", kind);
-    console.log("\nAdd GROQ_API_KEY to frontend/.env.local to run the twelve listings.\n");
+    console.log("\nAdd GEMINI_API_KEY to frontend/.env.local to run the twelve listings.\n");
     return finish();
   }
 
-  console.log("\nGroq key found, asking the real model\n");
+  console.log("\nGemini key found, asking the real model\n");
 
   // Counted apart because the two mistakes are not equal. A miss lets one bad listing
   // through and a human can still report it. A false rejection turns an honest owner

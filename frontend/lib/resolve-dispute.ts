@@ -1,9 +1,9 @@
 import "server-only";
 import { MIN_CONFIDENCE, arbitrate } from "./arbitrate";
 import { NotSigned, signVerdict } from "./agent-signer";
-import { MODEL } from "./groq";
+import { ARBITRATION_MODEL } from "./model";
 import { readRental } from "./rental-server";
-import { getSupabaseAdmin } from "./supabase-server";
+import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "./supabase-server";
 
 /**
  * Runs a dispute end to end: gather, ask, check, sign, record.
@@ -26,19 +26,35 @@ export async function resolveDispute(rentalId: bigint) {
 
   const { data: evidence } = await supabase
     .from("dispute_evidence")
-    .select("side, statement, created_at")
+    .select("side, statement, image_path, created_at")
     .eq("onchain_rental_id", Number(rentalId))
     .order("created_at");
 
   if (!evidence?.length) throw new NotSigned("Nobody has submitted anything yet.");
 
-  // The photographs are deliberately not fetched. They are filed, stored, shown to both
-  // parties and listed in the admin log, but they do not go to the model: a two photo
-  // dispute does not fit inside the free tier's per minute allowance. Downloading them
-  // here to throw them away would be work done to look thorough.
-  //
-  // Restoring them is this block plus one line in arbitrate.ts, once there is an
-  // allowance they fit inside.
+  // Downloaded here rather than handed over as links, because the model is given the file
+  // itself and a signed URL would only be a string it could not open. Sixty seconds is
+  // plenty: the fetch happens immediately below.
+  const photos = new Map<string, string>();
+  const paths = evidence.map((row) => row.image_path).filter((path): path is string => Boolean(path));
+  if (paths.length) {
+    const { data: signed } = await supabase.storage
+      .from(DISPUTE_EVIDENCE_BUCKET)
+      .createSignedUrls(paths, 60);
+    for (const entry of signed ?? []) {
+      if (!entry.path || !entry.signedUrl) continue;
+      try {
+        const response = await fetch(entry.signedUrl);
+        if (!response.ok) continue;
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const type = response.headers.get("content-type") ?? "image/jpeg";
+        photos.set(entry.path, `data:${type};base64,${buffer.toString("base64")}`);
+      } catch {
+        // One photograph that will not download is not a reason to abandon the dispute.
+        // The arbitrator sees what arrived and evidence_seen below records the difference.
+      }
+    }
+  }
 
   const { data: chat } = await supabase
     .from("messages")
@@ -50,6 +66,7 @@ export async function resolveDispute(rentalId: bigint) {
     evidence: evidence.map((row) => ({
       side: row.side as "owner" | "renter",
       statement: row.statement,
+      imageDataUrl: row.image_path ? (photos.get(row.image_path) ?? null) : null,
       submittedAt: row.created_at,
     })),
     chat: (chat ?? [])
@@ -88,11 +105,14 @@ export async function resolveDispute(rentalId: bigint) {
       signed,
       tx_hash: txHash,
       held_back_reason: heldBack,
-      model: MODEL,
-      // What it actually read, recorded beside the ruling. The photographs are in the log
-      // too, and a reader who saw them next to a verdict would otherwise assume they were
-      // weighed.
-      evidence_seen: "statements and conversation",
+      model: ARBITRATION_MODEL,
+      // What it actually read, recorded beside the ruling rather than assumed from the
+      // fact that a photograph exists. A picture that failed to download is a picture the
+      // arbitrator did not weigh, and only this line would ever say so.
+      evidence_seen:
+        photos.size > 0
+          ? `statements, conversation and ${photos.size} photograph${photos.size === 1 ? "" : "s"}`
+          : "statements and conversation",
     },
     { onConflict: "onchain_rental_id" }
   );
