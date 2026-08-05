@@ -136,9 +136,10 @@ export async function resolveDispute(rentalId: bigint) {
       })),
   });
 
-  // The bar. Below it nothing is signed and the dispute waits for the human resolver the
-  // contract already has, which is the honest outcome when the evidence does not settle
-  // it. Seven days of silence and the deposit goes back to the renter by timeout.
+  // The bar. Below it nothing is signed, and nothing can be: the agent is the only address
+  // the contract accepts. Seven days after the dispute opened, anyone at all can finalise it
+  // and the deposit returns to the renter, which is the contract treating an unjudged
+  // dispute as the platform's failure rather than the renter's.
   let signed = false;
   let txHash: string | null = null;
   let heldBack: string | null = null;

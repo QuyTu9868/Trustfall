@@ -29,14 +29,16 @@ async function main() {
   const treasury = process.env.TREASURY_ADDRESS || signers[signers.length - 1].address;
   // Only this address can apply a dispute verdict. It is the server's wallet, never
   // the agent's: the agent proposes over HTTP, the server signs.
+  //
+  // There is no second resolver. A human fallback with the same power used to sit beside
+  // it and was removed on purpose: this exists to find out what an agent can be trusted
+  // with, and a person standing behind it answers an easier question. A dispute the agent
+  // never answers is finalisable by anyone after the verdict window, which returns the
+  // deposit to the renter, so nothing is stuck and nobody has to be trusted for it.
   const agent = process.env.AGENT_ADDRESS || signers[signers.length - 2].address;
-  // Human fallback resolver, same three verdicts as the agent and nothing more. Must be
-  // a different key: one key holding both roles means losing it takes out both.
-  const admin = process.env.ADMIN_ADDRESS || signers[signers.length - 3].address;
   for (const [label, value] of [
     ["TREASURY_ADDRESS", treasury],
     ["AGENT_ADDRESS", agent],
-    ["ADMIN_ADDRESS", admin],
   ]) {
     if (!hre.ethers.isAddress(value)) {
       throw new Error(`${label} is not a valid address: ${value}`);
@@ -44,13 +46,11 @@ async function main() {
   }
   console.log(`Treasury: ${treasury}`);
   console.log(`Agent:    ${agent}`);
-  console.log(`Admin:    ${admin}`);
 
   const escrow = await hre.ethers.deployContract("RentalEscrow", [
     usdcAddress,
     treasury,
     agent,
-    admin,
   ]);
   await escrow.waitForDeployment();
   const escrowAddress = await escrow.getAddress();
@@ -59,13 +59,18 @@ async function main() {
   const existing = fs.existsSync(OUTPUT_FILE)
     ? JSON.parse(fs.readFileSync(OUTPUT_FILE, "utf8"))
     : {};
+  // The spread keeps anything else already recorded for this chain, which also means it
+  // would keep an address that no longer exists. admin was removed from the contract, so
+  // it is deleted here rather than left behind for something to read and believe.
+  const previous = { ...(existing[chainId] || {}) };
+  delete previous.admin;
+
   existing[chainId] = {
-    ...(existing[chainId] || {}),
+    ...previous,
     mockUSDC: usdcAddress,
     rentalEscrow: escrowAddress,
     treasury,
     agent,
-    admin,
   };
 
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });

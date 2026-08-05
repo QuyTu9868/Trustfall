@@ -13,9 +13,9 @@ import { OUTCOME, type Check, type Verdict } from "@/lib/admin-view";
  * sure, how often the server declined to act, whether one outcome dominates. The evidence
  * behind any single ruling is a click away rather than in the way.
  *
- * Read only, deliberately. The contract already has a human resolver and that power lives
- * in a wallet key, not behind a web form: a page that could move a deposit would be a page
- * worth attacking, and this one is only worth reading.
+ * Read only, and there is nothing for it to be otherwise. Only the agent's address can
+ * settle a dispute on chain, so there is no verdict for a person to enter here and no
+ * button worth attacking. This page reads a record; it does not have a lever.
  *
  * Behind a six digit code because it shows other people's disputes. It is not the thing
  * protecting the money, which is why a code is enough.

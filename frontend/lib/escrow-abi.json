@@ -15,20 +15,10 @@
         "internalType": "address",
         "name": "agent_",
         "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "admin_",
-        "type": "address"
       }
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
-  },
-  {
-    "inputs": [],
-    "name": "AdminMustDifferFromAgent",
-    "type": "error"
   },
   {
     "inputs": [
@@ -618,19 +608,6 @@
         "internalType": "uint64",
         "name": "",
         "type": "uint64"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "admin",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
       }
     ],
     "stateMutability": "view",

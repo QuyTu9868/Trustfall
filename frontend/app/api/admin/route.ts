@@ -7,10 +7,10 @@ import { verifyCode } from "@/lib/totp";
 /**
  * The admin log: what the arbitrator decided, and whether the server acted on it.
  *
- * Read only. There is nothing here that moves money, on purpose: the contract already has
- * a human resolver and that power lives in a wallet key, not behind a web form. This is
- * for reading what an automated system did with somebody's deposit, which is the thing
- * that has to be answerable afterwards.
+ * Read only. Nothing here moves money and nothing could: the contract accepts a verdict
+ * from the agent's address and from nowhere else. This exists to read what an automated
+ * system did with somebody's deposit, which is the thing that has to be answerable
+ * afterwards.
  *
  * Two shapes. Without rentalId it answers with the list, and deliberately without the
  * statements, photographs or conversation: a hundred rulings would mean a hundred signed

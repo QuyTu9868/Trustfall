@@ -188,7 +188,7 @@ export default function DevPage() {
  *
  * Three days is the dispute window: after a return, that is how long the owner has to
  * complain before the deposit can be released. Seven is the verdict window: once a dispute
- * is open, that is how long the arbitrator and the human resolver have before the deposit
+ * is open, that is how long the arbitrator has before the deposit
  * goes back to the renter by default.
  *
  * Local only, and the check is on the chain id rather than NODE_ENV: this talks straight

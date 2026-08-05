@@ -709,6 +709,26 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   chạy đúng".
 - **Skill đích:** `code-change-workflow`
 
+### [2026-08-05] Gỡ một vai khỏi contract, và bảy câu chữ trong app vẫn kể về nó
+
+- **Chuyện gì xảy ra:** User nhìn màn hình thấy dòng "Left for a human" rồi hỏi lại: admin
+  làm gì có quyền. Kiểm contract thì hoá ra **có**, `resolveDispute` nhận cả `agent` lẫn
+  `admin`, quyết định từ checkpoint 2. Nhưng trang `/admin` chỉ đọc, không có nút nào cho
+  người đó bấm. Tức câu chữ hứa một hành động không có bề mặt nào để thực hiện. Chốt gỡ
+  hẳn ví admin. Lúc gỡ mới đếm ra **bảy chỗ** đang kể về "human resolver": policy của agent,
+  hai trang admin, hai route, `dispute-box`, và trang `/dev`.
+- **Sai ở đâu:** Coi vai trò là một dòng trong contract. Thật ra một vai trò là một **lời
+  hứa**, và lời hứa đó được nhắc lại ở mọi chỗ giải thích cho người dùng. Xoá ở contract mà
+  không quét chữ thì sản phẩm vẫn nói về một người không tồn tại.
+- **Luật rút ra:** Bỏ hoặc thêm một vai trò trong contract thì `grep` tên vai đó **trên cả
+  repo** trước khi coi là xong, gồm cả prompt gửi cho model. Prompt là chỗ dễ sót nhất vì
+  nó không phải giao diện, nhưng nó là thứ định hình cả phán quyết: policy đang bảo agent
+  "dưới 0.6 thì chuyển cho người", trong khi không còn người nào.
+- **Thứ nhặt được:** gỡ vai không làm mất an toàn, vì lớp bảo vệ thật không phải cái ví dự
+  phòng mà là **hình dạng của quyền**: agent chỉ chọn được một trong ba chữ, và tranh chấp
+  không ai xử thì sau 7 ngày ai cũng gọi `finalize` được và cọc về renter.
+- **Skill đích:** `contract-test-audit`
+
 ### [2026-08-03] Cắt bớt thứ agent đọc mà suýt để giao diện nói dối là nó vẫn đọc
 
 - **Chuyện gì xảy ra:** Trọng tài tranh chấp không chạy nổi trên free tier: hai lời khai

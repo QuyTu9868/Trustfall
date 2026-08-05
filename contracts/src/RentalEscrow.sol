@@ -100,13 +100,19 @@ contract RentalEscrow is EIP712 {
 
     IERC20 public immutable usdc;
     address public immutable treasury;
-    /// @notice Wallet the server signs dispute verdicts with.
+    /// @notice Wallet the server signs dispute verdicts with. The only address that can
+    ///         resolve a dispute, on purpose.
+    ///
+    ///         There was a second one here, a human fallback with the same power, for use
+    ///         when the agent pipeline was down. It is gone deliberately. This exists to
+    ///         find out what an agent can be trusted with, and a system with a person
+    ///         standing behind it answers a different and easier question.
+    ///
+    ///         Removing it costs nothing in safety, because the fallback was never the
+    ///         thing protecting the money: the agent can only pick one of three verdicts,
+    ///         and a dispute nobody resolves is finalisable by anyone after the verdict
+    ///         window, which returns the deposit to the renter. That path is unchanged.
     address public immutable agent;
-    /// @notice Human fallback resolver, for when the agent pipeline is down and a
-    ///         dispute needs judging now. Has exactly the same power as the agent and
-    ///         no more: pick one of three verdicts. Neither can withdraw anything, and
-    ///         neither can change any address, because there are no setters at all.
-    address public immutable admin;
 
     mapping(uint256 => Rental) public rentals;
 
@@ -149,8 +155,9 @@ contract RentalEscrow is EIP712 {
     );
     event NonceBumped(uint256 indexed id, uint256 newNonce);
     event DisputeOpened(uint256 indexed id, address indexed by, uint64 at);
-    /// @dev `by` is logged so the UI can show whether the agent or the human fallback
-    ///      made the call. A privileged action nobody can see is the dangerous kind.
+    /// @dev `by` is logged even though only one address can call this. It costs a word and
+    ///      it means the record does not have to be trusted to know who acted. A privileged
+    ///      action nobody can see is the dangerous kind.
     event DisputeResolved(
         uint256 indexed id,
         address indexed by,
@@ -169,7 +176,6 @@ contract RentalEscrow is EIP712 {
     error NotRenter();
     error NotParty();
     error NotResolver();
-    error AdminMustDifferFromAgent();
     error WrongStatus(Status expected, Status actual);
     error NotCancellable(Status actual);
     error NotFinalizable(Status actual);
@@ -180,23 +186,14 @@ contract RentalEscrow is EIP712 {
     error BadSignature(address expected, address recovered);
     error DayNotAvailable(uint256 day, uint256 takenBy);
 
-    constructor(IERC20 usdc_, address treasury_, address agent_, address admin_)
-        EIP712("Trustfall", "1")
-    {
-        if (
-            address(usdc_) == address(0) || treasury_ == address(0)
-                || agent_ == address(0) || admin_ == address(0)
-        ) {
+    constructor(IERC20 usdc_, address treasury_, address agent_) EIP712("Trustfall", "1") {
+        if (address(usdc_) == address(0) || treasury_ == address(0) || agent_ == address(0)) {
             revert ZeroAddress();
         }
-        // Two separate keys or the fallback is pointless: if one key holds both roles,
-        // losing it takes out the agent and the human backup at the same time.
-        if (admin_ == agent_) revert AdminMustDifferFromAgent();
 
         usdc = usdc_;
         treasury = treasury_;
         agent = agent_;
-        admin = admin_;
     }
 
     /// @notice Renter asks to rent something and funds the escrow in the same call.
@@ -464,7 +461,7 @@ contract RentalEscrow is EIP712 {
     ///      One function rather than two so the split maths exists in exactly one
     ///      place. Which key was used is recorded in the event instead.
     function resolveDispute(uint256 id, Verdict verdict) external {
-        if (msg.sender != agent && msg.sender != admin) revert NotResolver();
+        if (msg.sender != agent) revert NotResolver();
         Rental storage rental = _expect(id, Status.Disputed);
 
         uint256 deposit = rental.deposit;

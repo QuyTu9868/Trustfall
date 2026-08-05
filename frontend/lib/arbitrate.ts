@@ -31,11 +31,16 @@ export type Finding = {
 };
 
 /**
- * Below this the server refuses to sign and the dispute waits for the human resolver.
+ * Below this the server signs nothing at all, and the deposit waits out the clock.
  *
- * A model that is unsure is not a coin toss to be rounded off. Splitting a deposit
- * because a machine could not tell is still a decision about somebody's money, made on
- * the grounds that nobody knew, which is worse than saying so and waiting.
+ * A model that is unsure is not a coin toss to be rounded off. Splitting a deposit because
+ * a machine could not tell is still a decision about somebody's money, made on the grounds
+ * that nobody knew, which is worse than saying so and waiting.
+ *
+ * Waiting has a defined end. There is no human resolver behind this: the agent is the only
+ * address the contract accepts. Seven days after a dispute opens, anyone can finalise it and
+ * the deposit goes back to the renter, which is the contract calling an unjudged dispute the
+ * platform's failure rather than the renter's.
  */
 export const MIN_CONFIDENCE = 0.6;
 
@@ -104,8 +109,10 @@ Two rules about "from", and they matter more than the verdict:
 
 "says" is one short sentence in your own words.
 
-Confidence is how sure you are, from 0 to 1. Be honest with it: below 0.6 the decision is
-handed to a human instead, which is the right outcome when the evidence does not settle it.`;
+Confidence is how sure you are, from 0 to 1. Be honest with it: below 0.6 nothing is signed
+at all, and seven days later the deposit returns to the renter by timeout. Nobody overrules
+you, so saying you are unsure is the only way to avoid deciding on evidence that does not
+settle it.`;
 
 export type Evidence = {
   side: "owner" | "renter";

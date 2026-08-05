@@ -95,7 +95,9 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
           </p>
         ) : (
           <p className="rounded-card border border-line bg-surface p-3 text-sm text-pend-ink">
-            Nothing was signed. {verdict.held_back_reason}
+            Nothing was signed. {verdict.held_back_reason} Nobody can sign it instead: the
+            agent is the only address the contract accepts. Seven days after the dispute was
+            opened, anybody at all can finalise it and the deposit returns to the renter.
           </p>
         )}
       </header>

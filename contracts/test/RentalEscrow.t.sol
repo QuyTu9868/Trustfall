@@ -20,7 +20,6 @@ contract RentalEscrowTest is Test {
     uint256 strangerKey;
 
     address agent = makeAddr("agent");
-    address admin = makeAddr("admin");
     address treasury = makeAddr("treasury");
 
     // Redeclared rather than imported: if someone edits the string in the contract,
@@ -52,7 +51,7 @@ contract RentalEscrowTest is Test {
         (stranger, strangerKey) = makeAddrAndKey("stranger");
 
         usdc = new MockUSDC();
-        escrow = new RentalEscrow(IERC20(address(usdc)), treasury, agent, admin);
+        escrow = new RentalEscrow(IERC20(address(usdc)), treasury, agent);
 
         address[2] memory renters = [renter, renter2];
         for (uint256 i = 0; i < renters.length; i++) {
@@ -625,32 +624,43 @@ contract RentalEscrowTest is Test {
         }
     }
 
-    /// @dev The human fallback for when the agent pipeline is down mid demo.
-    function test_AdminCanResolveWhenTheAgentCannot() public {
+    /// @dev There is no human fallback, deliberately. This existed to find out what an
+    ///      agent can be trusted with, and a person standing behind it answers an easier
+    ///      question. Nobody but the agent resolves, including whoever deployed this.
+    ///      One rental, three callers. Reaching Disputed three times would book the same
+    ///      days three times and fail on the double-booking guard, and a reverting call
+    ///      leaves nothing behind for the next one to trip over.
+    function test_NobodyButTheAgentCanResolve() public {
         uint256 id = _reachDisputed();
+        address[3] memory outsiders = [owner, renter, stranger];
 
-        vm.prank(admin);
-        escrow.resolveDispute(id, RentalEscrow.Verdict.Split);
+        for (uint256 i = 0; i < outsiders.length; i++) {
+            vm.expectRevert(RentalEscrow.NotResolver.selector);
+            vm.prank(outsiders[i]);
+            escrow.resolveDispute(id, RentalEscrow.Verdict.Split);
+        }
 
-        assertEq(uint256(_statusOf(id)), uint256(RentalEscrow.Status.Completed));
-        assertEq(usdc.balanceOf(address(escrow)), 0, "escrow empty");
+        // What is left when the fallback goes is already covered by
+        // test_UnjudgedDisputeReleasesToRenterAfterVerdictWindow: anyone can finalise once
+        // the window passes and the deposit returns to the renter, with no privileged key
+        // involved at any point.
     }
 
-    /// @dev Admin power is bounded to the same three outcomes as the agent. There is no
-    ///      amount parameter and no third address to send money to, so a stolen admin
-    ///      key can pick the wrong answer but cannot steal.
-    function test_AdminCannotSendMoneyAnywhereElse() public {
+    /// @dev Agent power is bounded to three outcomes. There is no amount parameter and no
+    ///      third address to send money to, so a stolen agent key can pick the wrong answer
+    ///      but cannot steal.
+    function test_TheAgentCannotSendMoneyAnywhereElse() public {
         uint256 id = _reachDisputed();
         uint256 strangerBefore = usdc.balanceOf(stranger);
         uint256 treasuryBefore = usdc.balanceOf(treasury);
 
-        vm.prank(admin);
+        vm.prank(agent);
         escrow.resolveDispute(id, RentalEscrow.Verdict.PayOwner);
 
         // Only the two parties to the rental ever receive the deposit.
         assertEq(usdc.balanceOf(stranger), strangerBefore, "no third party got paid");
         assertEq(usdc.balanceOf(treasury), treasuryBefore, "no extra fee was taken");
-        assertEq(usdc.balanceOf(admin), 0, "the admin cannot pay themselves");
+        assertEq(usdc.balanceOf(agent), 0, "the agent cannot pay themselves");
     }
 
     function test_ResolvedEventRecordsWhichKeyWasUsed() public {
@@ -658,15 +668,10 @@ contract RentalEscrowTest is Test {
 
         vm.expectEmit(true, true, false, true, address(escrow));
         emit RentalEscrow.DisputeResolved(
-            id, admin, RentalEscrow.Verdict.RefundRenter, DEPOSIT, 0
+            id, agent, RentalEscrow.Verdict.RefundRenter, DEPOSIT, 0
         );
-        vm.prank(admin);
+        vm.prank(agent);
         escrow.resolveDispute(id, RentalEscrow.Verdict.RefundRenter);
-    }
-
-    function test_ConstructorRejectsAdminEqualToAgent() public {
-        vm.expectRevert(RentalEscrow.AdminMustDifferFromAgent.selector);
-        new RentalEscrow(IERC20(address(usdc)), treasury, agent, agent);
     }
 
     function test_VerdictRefundRenter() public {
@@ -1265,16 +1270,13 @@ contract RentalEscrowTest is Test {
 
     function test_ConstructorRejectsZeroAddresses() public {
         vm.expectRevert(RentalEscrow.ZeroAddress.selector);
-        new RentalEscrow(IERC20(address(0)), treasury, agent, admin);
+        new RentalEscrow(IERC20(address(0)), treasury, agent);
 
         vm.expectRevert(RentalEscrow.ZeroAddress.selector);
-        new RentalEscrow(IERC20(address(usdc)), address(0), agent, admin);
+        new RentalEscrow(IERC20(address(usdc)), address(0), agent);
 
         vm.expectRevert(RentalEscrow.ZeroAddress.selector);
-        new RentalEscrow(IERC20(address(usdc)), treasury, address(0), admin);
-
-        vm.expectRevert(RentalEscrow.ZeroAddress.selector);
-        new RentalEscrow(IERC20(address(usdc)), treasury, agent, address(0));
+        new RentalEscrow(IERC20(address(usdc)), treasury, address(0));
     }
 
     // Funding failures --------------------------------------------------------

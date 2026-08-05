@@ -288,8 +288,10 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
             </span>
           ) : (
             <span className="text-xs text-pend-ink">
-              Not applied. {ruling.held_back_reason} A human resolver decides this one, and
-              if nobody does within seven days the deposit returns to the renter.
+              Not applied. {ruling.held_back_reason} There is no one to overrule it: the
+              agent is the only address the contract lets settle a dispute. Seven days after
+              this was opened, anyone can finalise it and the deposit comes back to the
+              renter.
             </span>
           )}
         </div>
@@ -328,7 +330,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
                 </button>
                 <span className="text-xs text-ink-muted">
                   {ruling.signed
-                    ? "The deposit has already moved, so this goes to a human rather than back to the agent."
+                    ? "The deposit has already moved and the contract cannot take it back, so this is recorded rather than acted on."
                     : "The deposit has not moved, so this is judged again."}
                 </span>
               </div>

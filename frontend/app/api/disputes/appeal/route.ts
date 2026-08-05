@@ -20,8 +20,8 @@ const MAX_STATEMENT = 1500;
  *   confidence bar or because signing failed. The dispute is judged again with the appeal
  *   in evidence, and the answer can genuinely differ because the input has.
  * - Anything else. The contract has already moved the money and no route can call it back.
- *   The appeal is recorded for the human resolver and the caller is told plainly that this
- *   is what happened, because a button that quietly does nothing is worse than no button.
+ *   The appeal is recorded and the caller is told plainly that this is what happened,
+ *   because a button that quietly does nothing is worse than no button.
  */
 export async function POST(request: Request) {
   try {
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         rejudged: false,
         message:
-          "The deposit has already been paid out and the contract cannot take it back. Your appeal is recorded and a human resolver will read it.",
+          "The deposit has already been paid out and the contract cannot take it back. Your appeal is on the record, beside the ruling it disagrees with.",
       });
     }
 
