@@ -1,0 +1,10 @@
+{
+  "name": "trustfall",
+  "private": true,
+  "type": "module",
+  "description": "Root scripts only. The real packages are contracts/ and frontend/, each with its own dependencies.",
+  "scripts": {
+    "dev:all": "node scripts/dev-all.mjs",
+    "seed:disputes": "npm --prefix frontend run seed:disputes"
+  }
+}

@@ -1,9 +1,11 @@
 /**
- * Empties the Supabase side of the app: listings, their photos, reviews and chat.
+ * Empties the Supabase side of the app: listings, their photos, reviews, chat, disputes,
+ * handover photographs and both agent logs.
  *
- * Meant to be run before pushing, so a branch is not carrying a pile of half-finished
- * test rentals. Rentals themselves are not touched because they are not here - they live
- * in the escrow contract, and restarting the local Hardhat node clears them.
+ * Run it before pushing, and run it after restarting the local chain. Rentals themselves
+ * are not here - they live in the escrow contract - and that is exactly why this exists: a
+ * fresh Hardhat node restarts rental ids at 1, so every row keyed by one now points at a
+ * different rental than the one it was written about.
  *
  * Refuses to run without --yes. This deletes everything in those tables, it cannot be
  * undone, and the difference between a test database and a real one is one wrong shell.
@@ -55,8 +57,21 @@ async function main() {
   }
   console.log(`photos       ${removed} removed`);
 
-  // listing_images goes with the listing through its cascade, so it is not listed here.
-  for (const table of ["reviews", "messages", "listings"]) {
+  // Order matters. Everything keyed by a rental id goes first, then the listings, whose
+  // cascade takes listing_images and listing_checks with them.
+  //
+  // The rental keyed tables are the reason this script matters more than it looks. Rentals
+  // live in the contract, and restarting the local node restarts their ids at 1, so a
+  // verdict left behind from a previous chain is a verdict attached to whatever rents next.
+  for (const table of [
+    "dispute_verdicts",
+    "dispute_evidence",
+    "handover_photos",
+    "notifications",
+    "reviews",
+    "messages",
+    "listings",
+  ]) {
     const { count, error } = await supabase
       .from(table)
       .delete({ count: "exact" })
