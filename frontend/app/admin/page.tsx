@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { OUTCOME, type Check, type Verdict } from "@/lib/admin-view";
 
@@ -27,6 +28,7 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloads, setReloads] = useState(0);
+  const router = useRouter();
 
   useEffect(() => {
     let active = true;
@@ -160,10 +162,15 @@ export default function AdminPage() {
             </thead>
             <tbody>
               {verdicts.map((entry) => (
-                <tr key={entry.onchain_rental_id} className="border-b border-line last:border-0">
+                /* The whole row navigates, because a target two characters wide is a target
+                   people miss. The id underneath stays a real link so the keyboard and the
+                   middle mouse button still work, which an onClick alone would take away. */
+                <tr
+                  key={entry.onchain_rental_id}
+                  onClick={() => router.push(`/admin/${entry.onchain_rental_id}`)}
+                  className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-canvas"
+                >
                   <td className="px-4 py-3">
-                    {/* The link is on the id rather than on the whole row, which would make
-                        selecting the reason text impossible. */}
                     <Link
                       href={`/admin/${entry.onchain_rental_id}`}
                       className="tabular underline decoration-line underline-offset-4"
@@ -211,24 +218,14 @@ export default function AdminPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {checks.map((check) => (
-              <article
-                key={check.id}
-                className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4"
-              >
+              /* The whole card is the link, not the title. A card that looks clickable and
+                 only is in one corner is worse than one that is not clickable at all. */
+              <Wrap key={check.id} href={check.listing_id ? `/admin/listings/${check.listing_id}` : null}>
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <span className="flex items-center gap-3">
-                    {/* Linked so a finding about a photograph can be checked against the
-                        photograph. The title alone is the checker's word for it. */}
-                    {check.listing_id ? (
-                      <Link
-                        href={`/admin/listings/${check.listing_id}`}
-                        className="text-sm underline decoration-line underline-offset-4"
-                      >
-                        {check.title ?? "Untitled"}
-                      </Link>
-                    ) : (
-                      <span className="text-sm">A listing since deleted</span>
-                    )}
+                    <span className="text-sm">
+                      {check.listing_id ? (check.title ?? "Untitled") : "A listing since deleted"}
+                    </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
                         check.decision === "approve"
@@ -266,11 +263,36 @@ export default function AdminPage() {
                     ))}
                   </dl>
                 )}
-              </article>
+              </Wrap>
             ))}
           </div>
         )}
       </section>
     </main>
+  );
+}
+
+/**
+ * A card that is a link when there is somewhere to go, and a plain card when there is not.
+ *
+ * Written out rather than wrapped conditionally at the call site, because the two branches
+ * have to keep the same padding, border and radius. When they drift, one kind of card sits
+ * a pixel out from the other and nobody can say why.
+ *
+ * The lift on hover is the one piece of movement in the app. UI-REFERENCE.md section 5
+ * rules motion out, and this is here because it was asked for: a card that navigates should
+ * say so before it is clicked. Kept to a couple of pixels, and dropped entirely for anybody
+ * who has asked their system for less motion.
+ */
+function Wrap({ href, children }: { href: string | null; children: React.ReactNode }) {
+  const shell = "flex flex-col gap-2 rounded-card border border-line bg-surface p-4";
+  if (!href) return <article className={shell}>{children}</article>;
+  return (
+    <Link
+      href={href}
+      className={`${shell} transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-ink-muted/40 hover:shadow-sm motion-reduce:transform-none motion-reduce:transition-none`}
+    >
+      {children}
+    </Link>
   );
 }
