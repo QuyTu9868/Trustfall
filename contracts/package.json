@@ -11,7 +11,8 @@
     "deploy:local": "hardhat run scripts/deploy.js --network localhost",
     "fund": "hardhat run scripts/fund.js --network localhost",
     "setup:local": "npm run deploy:local && npm run fund",
-    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia"
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "fund:sepolia": "hardhat run scripts/fund-sepolia.js --network sepolia"
   },
   "license": "MIT",
   "type": "commonjs",
