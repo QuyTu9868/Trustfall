@@ -27,7 +27,12 @@ import {
 } from "../lib/escrow";
 import { HANDOVER_PRIMARY, HANDOVER_TYPES } from "../lib/handover";
 import { resolveDispute } from "../lib/resolve-dispute";
-import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "../lib/supabase-server";
+import { moderateListing } from "../lib/moderation";
+import {
+  DISPUTE_EVIDENCE_BUCKET,
+  LISTING_IMAGE_BUCKET,
+  getSupabaseAdmin,
+} from "../lib/supabase-server";
 
 const RPC = "http://127.0.0.1:8545";
 const pub = createPublicClient({ chain: hardhat, transport: http(RPC) });
@@ -44,6 +49,8 @@ type Case = {
   expect: string;
   /** What each side's photograph shows, so the two disagree the way real ones do. */
   photos?: { owner: "damaged" | "clean"; renter: "damaged" | "clean" };
+  /** What the pair taken at the two handovers shows. This is the evidence that decides. */
+  handover?: { checkin: "damaged" | "clean"; checkout: "damaged" | "clean" };
 };
 
 /**
@@ -104,6 +111,8 @@ const CASES: Case[] = [
     // The owner claims a scratch and files a photograph of an unmarked panel. Both
     // photographs agree with the renter, which is the case worth being able to see.
     photos: { owner: "clean", renter: "clean" },
+    // Unmarked at both handovers, so the scratch the owner describes was never there.
+    handover: { checkin: "clean", checkout: "clean" },
   },
   {
     title: "Canon EOS R6 with 24-70mm",
@@ -122,6 +131,8 @@ const CASES: Case[] = [
     ],
     expect: "the owner keeps the deposit",
     photos: { owner: "damaged", renter: "damaged" },
+    // Clean going out and marked coming back, which is the pair doing its whole job.
+    handover: { checkin: "clean", checkout: "damaged" },
   },
   {
     title: "Studio apartment near Ben Thanh",
@@ -196,6 +207,34 @@ async function main() {
       .select("id")
       .single();
     if (error || !listing) throw new Error(`listing insert failed: ${error?.message}`);
+
+    // Two photographs on the listing, in the public bucket the app uses, so the arbitrator
+    // sees what was advertised before any of this happened.
+    for (const [index, kind] of (["clean", "clean"] as const).entries()) {
+      const path = `${listing.id}/${index}.jpg`;
+      const { error: imageError } = await supabase.storage
+        .from(LISTING_IMAGE_BUCKET)
+        .upload(path, await panel(kind), { contentType: "image/jpeg", upsert: true });
+      if (imageError) throw new Error(`listing image failed: ${imageError.message}`);
+      const { data: url } = supabase.storage.from(LISTING_IMAGE_BUCKET).getPublicUrl(path);
+      const { error: rowError } = await supabase
+        .from("listing_images")
+        .insert({ listing_id: listing.id, url: url.publicUrl, sort_order: index });
+      if (rowError) throw new Error(`listing image row failed: ${rowError.message}`);
+    }
+
+    // Through the real checker, so /admin gets a row for the listing as well as for the
+    // dispute. Approved listings are logged too: a log of refusals only is a log that
+    // cannot tell you the checker is passing everything.
+    const check = await moderateListing({
+      title: item.title,
+      description: item.description,
+      images: await Promise.all(
+        (["clean", "clean"] as const).map(async (kind) => `data:image/jpeg;base64,${(await panel(kind)).toString("base64")}`)
+      ),
+      listingId: listing.id,
+    });
+    console.log(`  listing check: ${check.decision}${check.reasons.length ? " - " + check.reasons.join(" | ") : ""}`);
 
     const price = parseUnits(item.pricePerDay, 6);
     const deposit = parseUnits(item.deposit, 6);
@@ -326,6 +365,29 @@ async function main() {
     await rpc("evm_increaseTime", [25 * 60 * 60]);
     await rpc("evm_mine", []);
     await handover("checkOut");
+
+    // The handover pair, written straight to the same place the route writes it. Taken
+    // before either side knew there would be an argument, which is what makes it worth more
+    // than anything filed afterwards.
+    if (item.handover) {
+      for (const phase of ["checkin", "checkout"] as const) {
+        const path = `handover/${id}/${phase}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from(DISPUTE_EVIDENCE_BUCKET)
+          .upload(path, await panel(item.handover[phase]), {
+            contentType: "image/jpeg",
+            upsert: true,
+          });
+        if (upErr) throw new Error(`handover upload failed: ${upErr.message}`);
+        const { error: rowErr } = await supabase.from("handover_photos").insert({
+          onchain_rental_id: Number(id),
+          phase,
+          image_path: path,
+          uploaded_by: (phase === "checkin" ? renter.address : owner.address).toLowerCase(),
+        });
+        if (rowErr) throw new Error(`handover row failed: ${rowErr.message}`);
+      }
+    }
 
     await wait(
       await ownerWallet.writeContract({
