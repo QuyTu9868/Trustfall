@@ -695,6 +695,32 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   nhớ ra.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-05] Deploy testnet quá muộn, và trả giá suốt quãng giữa
+
+- **Chuyện gì xảy ra:** Trustfall làm gần trọn dự án trên Hardhat node, chỉ lên Sepolia ở
+  checkpoint 12. Suốt quãng đó mỗi lần dựng lại chain là mất trạng thái: id đơn thuê chạy
+  lại từ 1 trong khi Supabase vẫn giữ dòng khoá theo id cũ, nonce MetaMask lệch phải xoá
+  activity data, địa chỉ contract đổi. Vòng lặp test đứt liên tục, tới mức user nói thẳng
+  "local chain tệ quá". Lúc deploy thật thì lộ ra một loạt lỗi **chỉ có trên mạng công
+  khai**, ở đúng thời điểm tệ nhất để phải sửa contract.
+- **Sai ở đâu:** Lấy "xong sản phẩm" làm mốc deploy. Mốc đúng phải là "**xong hình dạng
+  contract**". Hai thứ đó cách nhau rất xa, và toàn bộ khoảng cách đó là thời gian ngồi
+  trên một nền móng cứ reset.
+- **Luật rút ra:** Deploy lên testnet **ngay khi contract chốt và test xanh**, khoảng 40%
+  tiến độ, đừng chờ frontend. Thứ ép phải deploy lại là **thay đổi contract**, còn thứ làm
+  local khổ sở là **mọi thứ còn lại**. Chốt cái thứ nhất trước rồi làm cái thứ hai trên nền
+  không bao giờ reset.
+- **Chốt cái gì trước khi deploy:** quan trọng nhất là **vai trò và quyền**, tức ai được
+  gọi hàm nào. Ở đây quyết định bỏ ví admin đến rất muộn, và đó đúng là loại thay đổi
+  không sửa được nếu không deploy lại. Chữ ký hàm và event cũng vậy. Ngược lại, đổi text,
+  đổi giao diện, đổi prompt của agent thì deploy lại làm gì.
+- **Đừng làm gì:** đừng đầu tư công cụ cho local chain dễ chịu hơn. Ngày 2026-08-05 định
+  thêm một route dựng sẵn cả vòng thuê để đỡ phải ký ví sáu lần, user dừng lại đúng lúc:
+  "vẫn không giải quyết triệt để". Đúng, đó là vá triệu chứng của một quyết định sai về
+  thời điểm.
+- **Local chain còn dùng cho gì:** `forge test`, và lúc đang viết contract. Hết.
+- **Skill đích:** `deploy-verify-contract`
+
 ### [2026-08-05] `git diff --stat` cho qua, vì file có đổi, chỉ là đổi thiếu
 
 - **Chuyện gì xảy ra:** Sửa `dev-all.mjs` bằng `python .replace()`, hai khối lớn trượt âm
