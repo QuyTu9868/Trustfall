@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { IdentityGuard } from "@/components/identity-guard";
+import { Chrome } from "@/components/site-chrome";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Providers } from "./providers";
@@ -64,13 +65,17 @@ export default function RootLayout({
       </head>
       <body className="flex min-h-full flex-col">
         <Providers>
-          <SiteHeader />
-          <div className="mx-auto w-full max-w-[90rem] flex-1 px-6 py-10">
-            {/* Wraps the page, not the header. The header stays visible so the address on
-                screen is right there next to the warning explaining it. */}
-            <IdentityGuard>{children}</IdentityGuard>
-          </div>
-          <SiteFooter />
+          {/* Chrome decides what surrounds the page. Everywhere but /admin that is the
+              site header and footer; on /admin it is an empty bar with the theme switch,
+              because a log about what an agent did with somebody's money should not be one
+              click from a page that acts on their behalf. */}
+          <Chrome header={<SiteHeader />} footer={<SiteFooter />}>
+            <div className="mx-auto w-full max-w-[90rem] flex-1 px-6 py-10">
+              {/* Wraps the page, not the header. The header stays visible so the address on
+                  screen is right there next to the warning explaining it. */}
+              <IdentityGuard>{children}</IdentityGuard>
+            </div>
+          </Chrome>
         </Providers>
       </body>
     </html>

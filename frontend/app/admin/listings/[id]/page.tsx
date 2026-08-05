@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import type { Check, ListingRow } from "@/lib/admin-view";
 
@@ -46,7 +45,6 @@ export default function AdminListingPage({ params }: { params: Promise<{ id: str
   if (error) {
     return (
       <main className="flex flex-col gap-4">
-        <Back />
         <p className="rounded-card border border-stop-ink/30 bg-stop-bg/40 p-4 text-sm text-stop-ink">
           {error}
         </p>
@@ -57,7 +55,6 @@ export default function AdminListingPage({ params }: { params: Promise<{ id: str
   if (!detail) {
     return (
       <main className="flex flex-col gap-4">
-        <Back />
         <p className="text-sm text-ink-muted">Loading...</p>
       </main>
     );
@@ -67,8 +64,6 @@ export default function AdminListingPage({ params }: { params: Promise<{ id: str
 
   return (
     <main className="flex max-w-4xl flex-col gap-8">
-      <Back />
-
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl">{listing.title}</h1>
@@ -184,10 +179,3 @@ function Row({ label, value, tabular }: { label: string; value: string; tabular?
   );
 }
 
-function Back() {
-  return (
-    <Link href="/admin" className="text-sm text-ink-muted underline decoration-line">
-      Back to the log
-    </Link>
-  );
-}
