@@ -217,7 +217,18 @@ export default function AdminPage() {
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <span className="flex items-center gap-3">
-                    <span className="text-sm">{check.title ?? "A listing since deleted"}</span>
+                    {/* Linked so a finding about a photograph can be checked against the
+                        photograph. The title alone is the checker's word for it. */}
+                    {check.listing_id ? (
+                      <Link
+                        href={`/admin/listings/${check.listing_id}`}
+                        className="text-sm underline decoration-line underline-offset-4"
+                      >
+                        {check.title ?? "Untitled"}
+                      </Link>
+                    ) : (
+                      <span className="text-sm">A listing since deleted</span>
+                    )}
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
                         check.decision === "approve"

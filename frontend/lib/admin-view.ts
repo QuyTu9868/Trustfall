@@ -44,6 +44,20 @@ export type Check = {
   created_at: string;
 };
 
+/** The listing itself, as the checker was given it. */
+export type ListingRow = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  price_per_day: string;
+  deposit: string;
+  status: string;
+  moderation_status: string;
+  moderation_reason: string | null;
+  created_at: string;
+};
+
 /** What each outcome does to the deposit, in the words somebody losing would read. */
 export const OUTCOME: Record<Verdict["verdict"], string> = {
   refund_renter: "deposit to the renter",

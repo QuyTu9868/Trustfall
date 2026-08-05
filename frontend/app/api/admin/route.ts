@@ -23,8 +23,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Not signed in." }, { status: 401 });
     }
 
-    const rentalId = new URL(request.url).searchParams.get("rentalId");
-    return rentalId ? await one(Number(rentalId)) : await list();
+    const params = new URL(request.url).searchParams;
+    const rentalId = params.get("rentalId");
+    const listingId = params.get("listingId");
+    if (rentalId) return await one(Number(rentalId));
+    if (listingId) return await oneListing(listingId);
+    return await list();
   } catch (error) {
     return errorResponse(error);
   }
@@ -128,6 +132,40 @@ async function one(rentalId: number) {
         body: line.body,
         created_at: line.created_at,
       })),
+  });
+}
+
+/**
+ * One listing, and every time the checker looked at it.
+ *
+ * The sequence is the point. A rejection followed by a fix followed by an approval is the
+ * loop the product promises owners, and a single row cannot show it happened. Oldest first,
+ * for the same reason.
+ */
+async function oneListing(listingId: string) {
+  const supabase = getSupabaseAdmin();
+
+  const [{ data: listing, error }, { data: images }, { data: checks }] = await Promise.all([
+    supabase
+      .from("listings")
+      .select("id, title, description, category, price_per_day, deposit, status, moderation_status, moderation_reason, created_at")
+      .eq("id", listingId)
+      .maybeSingle(),
+    supabase.from("listing_images").select("url").eq("listing_id", listingId).order("sort_order"),
+    supabase
+      .from("listing_checks")
+      .select("id, decision, reasons, findings, model, created_at")
+      .eq("listing_id", listingId)
+      .order("created_at"),
+  ]);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!listing) return NextResponse.json({ error: "No such listing." }, { status: 404 });
+
+  return NextResponse.json({
+    listing,
+    images: (images ?? []).map((row) => row.url),
+    checks: checks ?? [],
   });
 }
 
