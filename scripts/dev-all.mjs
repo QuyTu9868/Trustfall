@@ -78,26 +78,49 @@ function finished(child, label) {
 }
 
 async function main() {
-  console.log("1/3  hardhat node");
-  const node = run("npm run node", contracts);
-  // If the chain dies, nothing downstream can work, so the whole stack goes with it rather
-  // than leaving a frontend up that fails on every read.
-  node.on("exit", (code) => {
-    if (code !== 0) {
-      console.error("\nThe chain stopped. Shutting the rest down.");
+  // A node that is already up is left alone, and that is the whole point of asking.
+  // Restarting it wipes the chain: rental ids go back to 1 while Supabase still holds rows
+  // keyed to the old ones, and every wallet's nonce is suddenly ahead of a chain that has
+  // never seen it. Reusing a live node makes running this twice cost nothing.
+  const already = await pingChain();
+
+  if (already) {
+    console.log("1/3  hardhat node is already running, reusing it");
+  } else {
+    console.log("1/3  hardhat node");
+    const node = run("npm run node", contracts);
+    // If the chain dies, nothing downstream can work, so the whole stack goes with it
+    // rather than leaving a frontend up that fails on every read.
+    node.on("exit", (code) => {
+      if (code !== 0) {
+        console.error("\nThe chain stopped. Shutting the rest down.");
+        stopAll();
+        process.exit(1);
+      }
+    });
+
+    if (!(await waitForChain())) {
+      console.error(`No answer from ${RPC} after ${WAIT_MS / 1000}s. Is port 8545 taken?`);
       stopAll();
       process.exit(1);
     }
-  });
-
-  if (!(await waitForChain())) {
-    console.error(`No answer from ${RPC} after ${WAIT_MS / 1000}s. Is port 8545 taken?`);
-    stopAll();
-    process.exit(1);
   }
 
+  // Redeployed either way. It takes seconds, it rewrites the ABI files the frontend
+  // imports, and a node that was already up may be running a contract older than the
+  // source. Addresses are deterministic, so on a reused node nothing moves.
   console.log("\n2/3  deploy and fund");
   await finished(run("npm run setup:local", contracts), "setup:local");
+
+  // Only when it is true. Printed on every run it became noise, and noise is how the
+  // warning that matters gets read past.
+  if (!already) {
+    console.log(
+      "\n     This chain is new, so rental ids start at 1 again. If Supabase still holds\n" +
+        "     disputes or messages from a previous run, clear them first:\n" +
+        "       npm --prefix frontend run clean:testdata -- --yes"
+    );
+  }
 
   console.log("\n3/3  next dev\n");
   run("npm run dev", frontend);

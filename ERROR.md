@@ -695,6 +695,25 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   nhớ ra.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-05] `git diff --stat` cho qua, vì file có đổi, chỉ là đổi thiếu
+
+- **Chuyện gì xảy ra:** Sửa `dev-all.mjs` bằng `python .replace()`, hai khối lớn trượt âm
+  thầm còn khối nhỏ thì trúng. `git diff --stat` thấy file có thay đổi nên qua ải, mình
+  commit kèm message tả rõ hành vi mới. Chạy thật thì nó vẫn dựng chain mới như cũ. Đây là
+  **lần thứ tư trong một phiên** cùng một kiểu trượt, và là **lần thứ hai** commit tả một
+  hành vi chưa tồn tại.
+- **Sai ở đâu:** Luật cũ mình tự đặt là "đối chiếu `git diff --stat` với danh sách file
+  định sửa". Luật đó **không đủ**: nó bắt được file vắng mặt, không bắt được file có mặt
+  mà thiếu hunk. Và `.replace()` của Python trả về chuỗi gốc khi không khớp, không ném lỗi,
+  nên nhiều lệnh sửa gộp trong một script thì chỉ một cái trúng cũng trông như thành công.
+- **Luật rút ra:** Sửa nhiều dòng trong file có sẵn thì **dùng Edit tool**, nó báo lỗi khi
+  không khớp. Nếu buộc phải dùng script, sau đó phải `grep` một **chuỗi đặc trưng của hành
+  vi mới** trong file, mỗi thay đổi một lần grep. Đếm số file là kiểm sai đơn vị, phải đếm
+  số thay đổi.
+- **Cách phát hiện lần này:** chạy thật rồi đọc output. Log in "1/3 hardhat node" thay vì
+  "reusing it". Không có `tsc`, `eslint` hay build nào bắt được, vì code cũ vẫn hợp lệ.
+- **Skill đích:** `code-change-workflow`
+
 ### [2026-08-03] Commit kèm message mô tả hành vi mà cây code chưa có
 
 - **Chuyện gì xảy ra:** Commit với message nói trọng tài đã ngừng đọc ảnh, nhưng
