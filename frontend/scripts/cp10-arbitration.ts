@@ -178,6 +178,7 @@ function toInput(dispute: Case) {
     // No listing either: these cases are about how statements and a conversation are
     // weighed, and an invented listing would be one more thing shaping the answer.
     listing: null,
+    appeals: [],
     // No handover pair in these cases. The suite is about how statements and a conversation
     // are weighed, and the handover photographs get their own coverage where they are the
     // thing being tested rather than two more blank squares.

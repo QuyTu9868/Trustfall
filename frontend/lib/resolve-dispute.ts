@@ -65,6 +65,14 @@ export async function resolveDispute(rentalId: bigint) {
     ...(handover ?? []).map((row) => row.image_path),
   ]);
 
+  // Filed after a ruling, by whoever disagreed with it. Read as evidence like everything
+  // else, and weighted down in the policy for the obvious reason.
+  const { data: appeals } = await supabase
+    .from("dispute_appeals")
+    .select("side, statement, created_at")
+    .eq("onchain_rental_id", Number(rentalId))
+    .order("created_at");
+
   const { data: chat } = await supabase
     .from("messages")
     .select("sender_address, body, created_at")
@@ -108,6 +116,11 @@ export async function resolveDispute(rentalId: bigint) {
         }
       : null,
     handover: handoverPhotos,
+    appeals: (appeals ?? []).map((row) => ({
+      side: row.side as "owner" | "renter",
+      statement: row.statement as string,
+      filedAt: row.created_at as string,
+    })),
     evidence: evidence.map((row) => ({
       side: row.side as "owner" | "renter",
       statement: row.statement,

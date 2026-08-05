@@ -44,6 +44,9 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
   const [filed, setFiled] = useState<Filed[] | null>(null);
   const [ruling, setRuling] = useState<Ruling | null>(null);
 
+  const [appeal, setAppeal] = useState("");
+  const [appealNote, setAppealNote] = useState<string | null>(null);
+  const [appealOpen, setAppealOpen] = useState(false);
   const [statement, setStatement] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
@@ -131,6 +134,38 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
       setReloads((count) => count + 1);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "That did not work.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function sendAppeal() {
+    if (!appeal.trim() || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/disputes/appeal", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(identityToken ? { "privy-id-token": identityToken } : {}),
+        },
+        body: JSON.stringify({ rentalId: rentalId.toString(), statement: appeal.trim() }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "That did not go through.");
+      setAppeal("");
+      setAppealOpen(false);
+      // Says which of the two things happened. An appeal filed after the deposit has moved
+      // cannot change it, and letting somebody believe otherwise is the worse outcome.
+      setAppealNote(
+        result.rejudged
+          ? "Judged again with your appeal in evidence."
+          : (result.message ?? "Your appeal is recorded.")
+      );
+      setReloads((count) => count + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That did not go through.");
     } finally {
       setSending(false);
     }
@@ -256,6 +291,55 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
               Not applied. {ruling.held_back_reason} A human resolver decides this one, and
               if nobody does within seven days the deposit returns to the renter.
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Only once there is something to appeal against, and only for the two of them.
+          The arbitrator runs at temperature zero, so asking it the same question again
+          returns the same answer: an appeal has to carry an argument it did not have. */}
+      {ruling && mine && (
+        <div className="flex flex-col gap-2 border-t border-line pt-4">
+          {appealNote ? (
+            <p className="text-xs text-pend-ink">{appealNote}</p>
+          ) : appealOpen ? (
+            <>
+              <textarea
+                value={appeal}
+                onChange={(event) => setAppeal(event.target.value)}
+                rows={3}
+                maxLength={1500}
+                placeholder="What did the arbitrator miss? Repeating your statement will not change the answer."
+                className="rounded-control border border-line bg-surface px-3 py-2 text-sm"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={sendAppeal}
+                  disabled={sending || appeal.trim().length === 0}
+                  className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas disabled:opacity-40"
+                >
+                  {sending ? "Sending..." : "Send the appeal"}
+                </button>
+                <button
+                  onClick={() => setAppealOpen(false)}
+                  className="text-xs text-ink-muted underline"
+                >
+                  Cancel
+                </button>
+                <span className="text-xs text-ink-muted">
+                  {ruling.signed
+                    ? "The deposit has already moved, so this goes to a human rather than back to the agent."
+                    : "The deposit has not moved, so this is judged again."}
+                </span>
+              </div>
+            </>
+          ) : (
+            <button
+              onClick={() => setAppealOpen(true)}
+              className="w-fit rounded-control border border-line bg-surface px-4 py-2 text-sm"
+            >
+              Appeal this
+            </button>
           )}
         </div>
       )}
