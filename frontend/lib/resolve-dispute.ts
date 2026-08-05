@@ -32,29 +32,20 @@ export async function resolveDispute(rentalId: bigint) {
 
   if (!evidence?.length) throw new NotSigned("Nobody has submitted anything yet.");
 
-  // Downloaded here rather than handed over as links, because the model is given the file
-  // itself and a signed URL would only be a string it could not open. Sixty seconds is
-  // plenty: the fetch happens immediately below.
-  const photos = new Map<string, string>();
-  const paths = evidence.map((row) => row.image_path).filter((path): path is string => Boolean(path));
-  if (paths.length) {
-    const { data: signed } = await supabase.storage
-      .from(DISPUTE_EVIDENCE_BUCKET)
-      .createSignedUrls(paths, 60);
-    for (const entry of signed ?? []) {
-      if (!entry.path || !entry.signedUrl) continue;
-      try {
-        const response = await fetch(entry.signedUrl);
-        if (!response.ok) continue;
-        const buffer = Buffer.from(await response.arrayBuffer());
-        const type = response.headers.get("content-type") ?? "image/jpeg";
-        photos.set(entry.path, `data:${type};base64,${buffer.toString("base64")}`);
-      } catch {
-        // One photograph that will not download is not a reason to abandon the dispute.
-        // The arbitrator sees what arrived and evidence_seen below records the difference.
-      }
-    }
-  }
+  // What the item looked like at each handover. Taken before either side knew there would
+  // be an argument, which is what makes the pair worth more than anything filed afterwards.
+  const { data: handover } = await supabase
+    .from("handover_photos")
+    .select("phase, image_path, created_at")
+    .eq("onchain_rental_id", Number(rentalId));
+
+  // Downloaded rather than handed over as links, because the model is given the file itself
+  // and a signed URL would only be a string it could not open. Sixty seconds is plenty: the
+  // fetch happens immediately below.
+  const photos = await downloadAll(supabase, [
+    ...evidence.map((row) => row.image_path),
+    ...(handover ?? []).map((row) => row.image_path),
+  ]);
 
   const { data: chat } = await supabase
     .from("messages")
@@ -62,7 +53,20 @@ export async function resolveDispute(rentalId: bigint) {
     .eq("onchain_rental_id", Number(rentalId))
     .order("created_at");
 
+  const handoverPhotos = (handover ?? [])
+    .map((row) => ({
+      phase: row.phase as "checkin" | "checkout",
+      imageDataUrl: photos.get(row.image_path),
+      takenAt: row.created_at as string,
+    }))
+    .filter((row): row is { phase: "checkin" | "checkout"; imageDataUrl: string; takenAt: string } =>
+      Boolean(row.imageDataUrl)
+    );
+
+  const filedPhotos = evidence.filter((row) => row.image_path && photos.has(row.image_path)).length;
+
   const verdict = await arbitrate({
+    handover: handoverPhotos,
     evidence: evidence.map((row) => ({
       side: row.side as "owner" | "renter",
       statement: row.statement,
@@ -110,10 +114,7 @@ export async function resolveDispute(rentalId: bigint) {
       // What it actually read, recorded beside the ruling rather than assumed from the
       // fact that a photograph exists. A picture that failed to download is a picture the
       // arbitrator did not weigh, and only this line would ever say so.
-      evidence_seen:
-        photos.size > 0
-          ? `statements, conversation and ${photos.size} photograph${photos.size === 1 ? "" : "s"}`
-          : "statements and conversation",
+      evidence_seen: describe(handoverPhotos.length, filedPhotos),
     },
     { onConflict: "onchain_rental_id" }
   );
@@ -130,4 +131,54 @@ export async function resolveDispute(rentalId: bigint) {
   }
 
   return { ...verdict, signed, txHash, heldBack };
+}
+
+/**
+ * Every stored image as a data URL, keyed by its path.
+ *
+ * One that will not download is skipped rather than fatal. A dispute is still judgeable on
+ * what did arrive, and describe() below records exactly how much that was, so the log never
+ * implies the arbitrator saw a picture it never got.
+ */
+async function downloadAll(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  paths: (string | null)[]
+) {
+  const wanted = paths.filter((path): path is string => Boolean(path));
+  const photos = new Map<string, string>();
+  if (!wanted.length) return photos;
+
+  const { data: signed } = await supabase.storage
+    .from(DISPUTE_EVIDENCE_BUCKET)
+    .createSignedUrls(wanted, 60);
+
+  for (const entry of signed ?? []) {
+    if (!entry.path || !entry.signedUrl) continue;
+    try {
+      const response = await fetch(entry.signedUrl);
+      if (!response.ok) continue;
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const type = response.headers.get("content-type") ?? "image/jpeg";
+      photos.set(entry.path, `data:${type};base64,${buffer.toString("base64")}`);
+    } catch {
+      // Left out rather than retried. The count below is what keeps the log honest.
+    }
+  }
+  return photos;
+}
+
+/**
+ * What the arbitrator actually read, in a sentence, recorded beside the ruling.
+ *
+ * Counted rather than assumed from the fact that a photograph exists somewhere. A picture
+ * that failed to download is a picture that was not weighed, and this line is the only
+ * thing that would ever say so.
+ */
+function describe(handoverCount: number, filedCount: number) {
+  const parts = ["statements", "conversation"];
+  if (handoverCount) parts.push(`${handoverCount} handover photograph${handoverCount === 1 ? "" : "s"}`);
+  if (filedCount) parts.push(`${filedCount} filed photograph${filedCount === 1 ? "" : "s"}`);
+  return parts.length === 2
+    ? "statements and conversation"
+    : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
 }

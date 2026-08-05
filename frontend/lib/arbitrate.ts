@@ -43,6 +43,8 @@ const POLICY = `You are the arbitrator for Trustfall, a marketplace for renting 
 with the money held in escrow. A rental has gone wrong and the deposit has to be settled.
 
 You will see, in order:
+- the handover photographs, if they were taken: what the item looked like when the renter
+  collected it, and what it looked like when the owner got it back
 - the two parties' statements, and one photograph from each
 - the conversation they had during the rental
 
@@ -55,6 +57,10 @@ Choose exactly one of three outcomes:
 Weigh what you can see over what people assert. A photograph showing an undamaged item
 outweighs a claim that it was damaged. Photographs are timestamped by the server when they
 arrive, not by the camera, so their order is reliable and their contents are not.
+
+The handover pair is the strongest evidence here, and the only evidence taken before anyone
+knew there would be an argument. Damage visible at check-out and absent at check-in
+happened during the rental. Damage visible in both was already there.
 
 After the photographs, weigh the conversation over the statements. The statements were
 written after the argument started and are aimed at you; the messages were written while it
@@ -76,7 +82,7 @@ Answer with JSON only:
 findings comes first because it is the working, not the summary: two to five entries, each
 one thing you actually read that changed your mind. "from" must name where it came from and
 must be exactly one of: "owner statement", "renter statement", "conversation", "owner
-photo", "renter photo".
+photo", "renter photo", "check-in photo", "check-out photo".
 
 Two rules about "from", and they matter more than the verdict:
 - Only name a source that was actually given to you above. If a photograph or a
@@ -98,8 +104,16 @@ export type Evidence = {
   submittedAt: string;
 };
 
+/** What the item looked like at each handover, and when the server received the picture. */
+export type Handover = {
+  phase: "checkin" | "checkout";
+  imageDataUrl: string;
+  takenAt: string;
+};
+
 export async function arbitrate(input: {
   evidence: Evidence[];
+  handover: Handover[];
   chat: { sender: "owner" | "renter"; body: string; at: string }[];
 }): Promise<DisputeVerdict> {
   const said = input.evidence
@@ -109,21 +123,39 @@ export async function arbitrate(input: {
     )
     .join("\n\n");
 
+  // Ordered check-in first, because the whole value of the pair is the comparison and a
+  // model shown them backwards would read the repair as the damage.
+  const handover = [...input.handover].sort((a) => (a.phase === "checkin" ? -1 : 1));
+  const handoverNote = handover.length
+    ? handover
+        .map(
+          (photo) =>
+            `Photograph ${photo.phase === "checkin" ? "at check-in, when the renter collected it" : "at check-out, when the owner got it back"}, received ${photo.takenAt}.`
+        )
+        .join("\n")
+    : "No handover photographs were taken.";
+
   const conversation = input.chat.length
     ? input.chat.map((line) => `${line.sender} (${line.at}): ${line.body}`).join("\n")
     : "They did not talk during the rental.";
 
   const answer = await askModel({
     system: POLICY,
-    text: `<untrusted>\n${said}\n\nConversation:\n${conversation}\n</untrusted>`,
-    // Both photographs, whole and separate. They were dropped for a while because two of
-    // them plus this text came to about 8100 tokens against the previous provider's 8000 a
-    // minute. Measured on this one: two images cost 2178 tokens and the entire call 2453,
-    // against an allowance in the hundreds of thousands. The workaround outlived its
-    // reason, and lib/stack-images.ts went with it.
-    images: input.evidence
-      .map((entry) => entry.imageDataUrl)
-      .filter((url): url is string => Boolean(url)),
+    // The handover note sits outside the untrusted block because the server wrote it: the
+    // phases and the times come from the chain and the database, not from either party.
+    text: `${handoverNote}\n\n<untrusted>\n${said}\n\nConversation:\n${conversation}\n</untrusted>`,
+    // Whole and separate, never stacked. They were dropped entirely for a while because two
+    // of them plus this text came to about 8100 tokens against the previous provider's 8000
+    // a minute. Measured on this one: two images cost 2178 tokens and the entire call 2453,
+    // against an allowance in the hundreds of thousands.
+    //
+    // Handover pair first so the order matches the note above, then what each side filed.
+    images: [
+      ...handover.map((photo) => photo.imageDataUrl),
+      ...input.evidence
+        .map((entry) => entry.imageDataUrl)
+        .filter((url): url is string => Boolean(url)),
+    ],
     model: ARBITRATION_MODEL,
   });
 

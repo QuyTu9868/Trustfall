@@ -175,6 +175,10 @@ function toInput(dispute: Case) {
   const now = new Date().toISOString();
   const photo = dispute.photos ? BLANK_PHOTO : null;
   return {
+    // No handover pair in these cases. The suite is about how statements and a conversation
+    // are weighed, and the handover photographs get their own coverage where they are the
+    // thing being tested rather than two more blank squares.
+    handover: [],
     evidence: [
       { side: "owner" as const, statement: dispute.owner, imageDataUrl: photo, submittedAt: now },
       { side: "renter" as const, statement: dispute.renter, imageDataUrl: photo, submittedAt: now },

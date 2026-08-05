@@ -8,6 +8,7 @@ import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { ChatThread } from "@/components/chat-thread";
 import { DepositCountdown } from "@/components/deposit-countdown";
 import { DisputeBox } from "@/components/dispute-box";
+import { HandoverPhoto } from "@/components/handover-photo";
 import { ShowHandoverCode } from "@/components/handover-code";
 import { ReviewBox } from "@/components/review-box";
 import { RoleTag } from "@/components/role-tag";
@@ -322,6 +323,18 @@ export function RentalCard({
             onChanged();
           }}
         />
+      )}
+
+      {/* Check-in first and then check-out, in the order they happened. Whoever received
+          the item is the one who can add it, and both sides can see either once it is
+          there. Shown from Active onwards, because before that nothing has changed hands. */}
+      {rental.status !== "Requested" && rental.status !== "Approved" && (
+        <HandoverPhoto rentalId={rental.id} phase="checkin" canUpload={isRenter} />
+      )}
+      {(rental.status === "Returned" ||
+        rental.status === "Disputed" ||
+        rental.status === "Completed") && (
+        <HandoverPhoto rentalId={rental.id} phase="checkout" canUpload={isOwner} />
       )}
 
       {rental.status === "Disputed" && <DisputeBox rentalId={rental.id} />}
