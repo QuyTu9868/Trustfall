@@ -45,20 +45,25 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
-/** Asks the chain for a block number until it answers, or gives up loudly. */
+/** One question to the chain: are you there. */
+async function pingChain() {
+  try {
+    const response = await fetch(RPC, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** The same question, repeated, while a node we just started finishes waking up. */
 async function waitForChain() {
   const deadline = Date.now() + WAIT_MS;
   while (Date.now() < deadline) {
-    try {
-      const response = await fetch(RPC, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
-      });
-      if (response.ok) return true;
-    } catch {
-      // Not up yet. The only expected outcome for the first second or so.
-    }
+    if (await pingChain()) return true;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return false;
