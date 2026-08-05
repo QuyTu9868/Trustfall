@@ -1,7 +1,7 @@
 "use client";
 
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   CATEGORIES,
@@ -47,6 +47,7 @@ export default function ListPage() {
 function ListFlow() {
   const { authenticated, login } = usePrivy();
   const { identityToken } = useIdentityToken();
+  const router = useRouter();
 
   // Editing a listing that already exists rather than writing a new one. Same three steps
   // and the same fields, because a second form that drifts from the first is how the two
@@ -254,6 +255,18 @@ function ListFlow() {
         body,
       });
       const result = await response.json();
+
+      // 202 means taken but not yet judged, which is what a new listing gets: the check
+      // runs after the response and can take a minute when the model is busy. Waiting on
+      // that behind a spinner is how a filled in form gets abandoned, so the answer is
+      // delivered to the bell instead and this leaves.
+      //
+      // Straight to browse rather than to the listing, because the listing is not published
+      // yet and a page saying so is a worse ending than the grid it will appear in.
+      if (response.status === 202) {
+        router.push("/");
+        return;
+      }
 
       // The publish route runs the same check. It can disagree with step 2 when the draft
       // changed after it passed, so the reasons are shown the same way here rather than

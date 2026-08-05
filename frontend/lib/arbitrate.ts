@@ -23,6 +23,12 @@ export type DisputeVerdict = {
    * is a hallucination the log catches by itself.
    */
   findings: Finding[];
+  /**
+   * Which model produced this, read back from the call rather than from the constant that
+   * asked. They differ when the primary was overloaded and the fallback answered, and a log
+   * naming a model that was not involved is worse than one naming none.
+   */
+  model: string;
 };
 
 export type Finding = {
@@ -212,7 +218,7 @@ export async function arbitrate(input: {
     model: ARBITRATION_MODEL,
   });
 
-  return readVerdict(answer);
+  return { ...readVerdict(answer.text), model: answer.model };
 }
 
 /**
@@ -223,7 +229,7 @@ export async function arbitrate(input: {
  * So an answer that cannot be read throws, the server does not sign, and the dispute waits
  * for a person.
  */
-export function readVerdict(answer: string): DisputeVerdict {
+export function readVerdict(answer: string): Omit<DisputeVerdict, "model"> {
   const objects = balancedObjects(answer);
 
   for (let i = objects.length - 1; i >= 0; i--) {

@@ -23,6 +23,8 @@ export { toDataUrls } from "./model";
  */
 export type Verdict = {
   decision: "approve" | "reject";
+  /** Which model actually answered, which is the fallback when the primary was overloaded. */
+  model: string;
   reasons: string[];
   /**
    * Where each judgement came from, the same shape the arbitrator returns.
@@ -124,7 +126,7 @@ export async function moderateListing(input: {
    */
   listingId?: string;
 }): Promise<Verdict> {
-  if (moderationBypassed()) return { decision: "approve", reasons: [], findings: [] };
+  if (moderationBypassed()) return { decision: "approve", reasons: [], findings: [], model: "bypassed" };
 
   const untrusted = `<untrusted>
 Title: ${input.title}
@@ -132,14 +134,13 @@ Description: ${input.description}
 </untrusted>`;
 
   try {
-    const verdict = readVerdict(
-      await askModel({
-        system: POLICY,
-        text: untrusted,
-        images: input.images,
-        model: MODERATION_MODEL,
-      })
-    );
+    const answer = await askModel({
+      system: POLICY,
+      text: untrusted,
+      images: input.images,
+      model: MODERATION_MODEL,
+    });
+    const verdict = { ...readVerdict(answer.text), model: answer.model };
 
     if (input.listingId) await record(input.listingId, verdict);
     return verdict;
@@ -155,13 +156,6 @@ Description: ${input.description}
 export { MODERATION_MODEL } from "./model";
 
 /**
- * Turns whatever came back into a decision.
- *
- * Unreadable counts as a rejection, not an approval. A moderator whose answer cannot be
- * understood has not approved anything, and reading silence as consent is how a gate ends
- * up open. Exported so the tests can pin this down without spending API calls.
- */
-/**
  * Writes the check down, and never stops a publish over it.
  *
  * The opposite call from the one the arbitrator makes: there, a verdict that could not be
@@ -175,13 +169,20 @@ async function record(listingId: string, verdict: Verdict) {
     decision: verdict.decision,
     reasons: verdict.reasons,
     findings: verdict.findings,
-    model: MODERATION_MODEL,
+    model: verdict.model,
   });
   if (error) console.error("Could not record the listing check:", error.message);
 }
 
-export function readVerdict(answer: string): Verdict {
-  const unreadable: Verdict = {
+/**
+ * Turns whatever came back into a decision.
+ *
+ * Unreadable counts as a rejection, not an approval. A moderator whose answer cannot be
+ * understood has not approved anything, and reading silence as consent is how a gate ends
+ * up open. Exported so the tests can pin this down without spending API calls.
+ */
+export function readVerdict(answer: string): Omit<Verdict, "model"> {
+  const unreadable: Omit<Verdict, "model"> = {
     decision: "reject",
     reasons: ["The check did not come back clearly. Try again."],
     findings: [],

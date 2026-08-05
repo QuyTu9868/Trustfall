@@ -70,6 +70,27 @@ export async function notify(
  * says "rejected" loses the owner, and that is doubly true in a bell where there is no
  * form underneath to explain it.
  */
+/**
+ * The check never finished, so there is no verdict to deliver, only the fact of it.
+ *
+ * Worth its own notification. The listing sits at pending, which looks identical to still
+ * being checked, and without this the owner waits for a bell that is never going to ring.
+ */
+export async function notifyListingCheckFailed(owner: string, listingId: string, title: string) {
+  const { error } = await getSupabaseAdmin().from("notifications").upsert(
+    {
+      recipient_address: owner,
+      kind: "listing-check-failed",
+      listing_id: listingId,
+      body: `"${title}" could not be checked just now. Open it and submit again.`,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    },
+    { onConflict: "recipient_address,kind,listing_id" }
+  );
+  if (error) console.error("Could not write the listing notification:", error.message);
+}
+
 export async function notifyListingVerdict(
   owner: string,
   listingId: string,

@@ -1,7 +1,6 @@
 import "server-only";
 import { MIN_CONFIDENCE, arbitrate } from "./arbitrate";
 import { NotSigned, signVerdict } from "./agent-signer";
-import { ARBITRATION_MODEL } from "./model";
 import { bytes32ToListingId } from "./escrow";
 import { readRental } from "./rental-server";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "./supabase-server";
@@ -145,7 +144,7 @@ export async function resolveDispute(rentalId: bigint) {
   let heldBack: string | null = null;
 
   if (verdict.confidence < MIN_CONFIDENCE) {
-    heldBack = `Confidence ${verdict.confidence.toFixed(2)} is below ${MIN_CONFIDENCE}. Left for a human.`;
+    heldBack = `Confidence ${verdict.confidence.toFixed(2)} is below ${MIN_CONFIDENCE}, so nothing was signed.`;
   } else {
     try {
       txHash = await signVerdict(rentalId, verdict.verdict);
@@ -165,7 +164,7 @@ export async function resolveDispute(rentalId: bigint) {
       signed,
       tx_hash: txHash,
       held_back_reason: heldBack,
-      model: ARBITRATION_MODEL,
+      model: verdict.model,
       // What it actually read, recorded beside the ruling rather than assumed from the
       // fact that a photograph exists. A picture that failed to download is a picture the
       // arbitrator did not weigh, and only this line would ever say so.

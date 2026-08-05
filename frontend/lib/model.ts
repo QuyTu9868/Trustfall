@@ -35,6 +35,21 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 export const MODERATION_MODEL = "gemini-3.5-flash-lite";
 export const ARBITRATION_MODEL = "gemini-3.5-flash-lite";
 
+/**
+ * Where to go when the model above is not answering at all.
+ *
+ * Only for 503, which is Google saying the model is overloaded worldwide. That is a
+ * different thing from 429, and the difference decides whether falling back is sensible: a
+ * per minute limit clears on its own, a daily limit does not clear at all, and neither is
+ * helped by asking a different model. An overloaded model might never come back today, and
+ * during a demo that is the whole product down.
+ *
+ * Deliberately a model with a small daily allowance. It is only reached when the primary is
+ * unreachable, so twenty a day is plenty, and picking the stronger one means the fallback is
+ * a better answer rather than a worse one.
+ */
+const FALLBACK_MODEL = "gemini-3.6-flash";
+
 // Fifteen requests a minute alongside the 500 a day, from the same page. Not a constant
 // because nothing in the app paces itself: the retry below rides out a busy minute, and
 // only the test suites space their calls deliberately.
@@ -63,10 +78,18 @@ const RETRY_DELAYS_MS = [13_000, 25_000, 40_000];
 const MAX_WAIT_MS = 45_000;
 
 class RateLimited extends Error {
-  constructor(readonly retryAfterMs: number | null) {
+  constructor(
+    readonly retryAfterMs: number | null,
+    /** True for 503, meaning the model is overloaded rather than this account being over
+     *  its allowance. Only the first is worth asking a different model about. */
+    readonly overloaded = false
+  ) {
     super("rate limited");
   }
 }
+
+/** The answer, and which model actually produced it, which is not always the one asked. */
+export type Answer = { text: string; model: string };
 
 export type Ask = {
   system: string;
@@ -84,22 +107,40 @@ export type Ask = {
  * and disagree about what an unreadable answer means. For the listing checker it means
  * reject; for the arbitrator there is no safe default, since all three outcomes move money.
  */
-export async function askModel(input: Ask): Promise<string> {
+export async function askModel(input: Ask): Promise<Answer> {
+  let overloaded = false;
+
   for (let attempt = 0; ; attempt++) {
     try {
-      return await once(input);
+      return { text: await once(input, input.model), model: input.model };
     } catch (error) {
       if (!(error instanceof RateLimited)) throw error;
-      if (attempt >= RETRY_DELAYS_MS.length) {
-        throw new ModelUnavailable("The model is busy. Wait a minute and try again.");
-      }
+      overloaded = overloaded || error.overloaded;
+
+      if (attempt >= RETRY_DELAYS_MS.length) break;
       const suggested = error.retryAfterMs ?? RETRY_DELAYS_MS[attempt];
       await new Promise((resolve) => setTimeout(resolve, Math.min(suggested, MAX_WAIT_MS)));
     }
   }
+
+  // Out of patience. Which model to blame depends on why: an overloaded model is Google's
+  // problem and another one may well answer, while a rate limit is this account's problem
+  // and every model shares the account. Trying the fallback on a rate limit would spend a
+  // second allowance to be told the same thing.
+  if (!overloaded || input.model === FALLBACK_MODEL) {
+    throw new ModelUnavailable("The model is busy. Wait a minute and try again.");
+  }
+
+  try {
+    return { text: await once(input, FALLBACK_MODEL), model: FALLBACK_MODEL };
+  } catch {
+    throw new ModelUnavailable(
+      `Both ${input.model} and ${FALLBACK_MODEL} are unavailable right now. This is Google's end, not yours.`
+    );
+  }
 }
 
-async function once(input: Ask) {
+async function once(input: Ask, model: string) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     throw new ModelUnavailable(
@@ -109,7 +150,7 @@ async function once(input: Ask) {
 
   let response: Response;
   try {
-    response = await fetch(`${ENDPOINT}/${input.model}:generateContent`, {
+    response = await fetch(`${ENDPOINT}/${model}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
@@ -137,7 +178,7 @@ async function once(input: Ask) {
   }
 
   // Google's own trouble, not the caller's. Waits alongside the rate limit.
-  if (response.status === 503) throw new RateLimited(null);
+  if (response.status === 503) throw new RateLimited(null, true);
 
   if (response.status === 429) {
     const body = await response.text();
@@ -147,7 +188,7 @@ async function once(input: Ask) {
     // spend a fifth of a day's twenty to learn something the first reply already said.
     if (/PerDay/i.test(body)) {
       throw new ModelUnavailable(
-        `Today's allowance for ${input.model} is used up. It resets at midnight Pacific.`
+        `Today's allowance for ${model} is used up. It resets at midnight Pacific.`
       );
     }
     throw new RateLimited(retryAfterMs(body));

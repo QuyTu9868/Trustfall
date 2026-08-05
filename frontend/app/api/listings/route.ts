@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { errorResponse } from "@/lib/api";
 import {
   ALLOWED_IMAGE_TYPES,
@@ -10,7 +10,7 @@ import {
   type Category,
 } from "@/lib/listing";
 import { ModerationUnavailable, moderateListing, toDataUrls } from "@/lib/moderation";
-import { notifyListingVerdict } from "@/lib/notify";
+import { notifyListingCheckFailed, notifyListingVerdict } from "@/lib/notify";
 import {
   AuthError,
   readIdentityToken,
@@ -128,28 +128,42 @@ async function createListing(request: Request) {
     return errorResponse(error);
   }
 
-  // Now the gate. The browser ran this too, at step 2, so the owner saw it coming, but
-  // that call can simply not be made, and this is the one that decides.
+  // The gate runs after the answer goes out, not before it.
   //
-  // Fails closed on purpose. A moderation step that waves listings through whenever the
-  // model is unreachable is not a moderation step, it is a delay. A listing left at
-  // pending is recoverable from the owner's own page; one waved through is not.
-  const verdict = await moderateListing({
-    title,
-    description,
-    images: await toDataUrls(images),
-    // The row exists by now, so the check is recorded against it. The preview call the
-    // browser makes at step 2 has no listing yet and is deliberately not logged: it is a
-    // rehearsal, and a log full of rehearsals hides the decisions that counted.
-    listingId: listing.id,
+  // It used to be awaited here, and a measured check took sixty four seconds while Google
+  // was busy. Sixty four seconds of a spinner on a form somebody has already filled in is
+  // how a listing gets abandoned halfway, and refreshing during it used to lose the
+  // description and both photographs.
+  //
+  // Nothing is weakened by moving it. The listing is written as pending and pending is not
+  // published: it does not appear in the browse grid and cannot be rented. The check still
+  // decides, still runs on the server, still cannot be skipped by the browser declining to
+  // call it. The only thing that changed is who is waiting.
+  const photos = await toDataUrls(images);
+  after(async () => {
+    try {
+      const verdict = await moderateListing({
+        title,
+        description,
+        images: photos,
+        // The row exists by now, so the check is recorded against it. The preview call the
+        // browser makes at step 2 has no listing yet and is deliberately not logged: it is
+        // a rehearsal, and a log full of rehearsals hides the decisions that counted.
+        listingId: listing.id,
+      });
+      await applyVerdict(listing.id, owner, title, verdict);
+    } catch (error) {
+      // Nobody is waiting on this response any more, so a failure that goes only to the
+      // console is a listing stuck at pending with its owner never told why. The row stays
+      // pending on purpose, which is recoverable from their own page, and the bell says so.
+      console.error("The listing check did not complete:", error);
+      await notifyListingCheckFailed(owner, listing.id, title);
+    }
   });
 
-  await applyVerdict(listing.id, owner, title, verdict);
-
-  return NextResponse.json(
-    { id: listing.id, decision: verdict.decision, reasons: verdict.reasons },
-    { status: verdict.decision === "approve" ? 201 : 422 }
-  );
+  // 202: taken, not yet decided. The owner is sent on their way and the bell brings the
+  // verdict, which migration 005 was written for.
+  return NextResponse.json({ id: listing.id, pending: true }, { status: 202 });
 }
 
 /**
