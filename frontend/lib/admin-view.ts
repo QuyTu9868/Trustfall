@@ -32,6 +32,18 @@ export type ChatLine = {
   created_at: string;
 };
 
+/** A listing the checker looked at, and what it made of it. */
+export type Check = {
+  id: number;
+  listing_id: string | null;
+  title: string | null;
+  decision: "approve" | "reject";
+  reasons: string[];
+  findings: { from: string; says: string }[];
+  model: string;
+  created_at: string;
+};
+
 /** What each outcome does to the deposit, in the words somebody losing would read. */
 export const OUTCOME: Record<Verdict["verdict"], string> = {
   refund_renter: "deposit to the renter",

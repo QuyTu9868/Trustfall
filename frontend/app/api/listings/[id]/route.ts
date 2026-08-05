@@ -106,6 +106,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       title,
       description,
       images: await urlsToDataUrls(existing.listing_images.map((image) => image.url)),
+      listingId: id,
     });
 
     await applyVerdict(id, owner, title, verdict);

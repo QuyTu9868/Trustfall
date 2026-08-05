@@ -43,6 +43,8 @@ const POLICY = `You are the arbitrator for Trustfall, a marketplace for renting 
 with the money held in escrow. A rental has gone wrong and the deposit has to be settled.
 
 You will see, in order:
+- the listing: what the owner advertised, in their own words and photographs, before any of
+  this happened
 - the handover photographs, if they were taken: what the item looked like when the renter
   collected it, and what it looked like when the owner got it back
 - the two parties' statements, and one photograph from each
@@ -58,9 +60,11 @@ Weigh what you can see over what people assert. A photograph showing an undamage
 outweighs a claim that it was damaged. Photographs are timestamped by the server when they
 arrive, not by the camera, so their order is reliable and their contents are not.
 
-The handover pair is the strongest evidence here, and the only evidence taken before anyone
-knew there would be an argument. Damage visible at check-out and absent at check-in
-happened during the rental. Damage visible in both was already there.
+The listing and the handover pair are the evidence nobody wrote for you. The listing came
+first of all: damage the owner is now complaining about, visible in the photographs they
+advertised it with, was never the renter's doing. Then the pair: damage visible at check-out
+and absent at check-in happened during the rental, and damage visible in both was already
+there.
 
 After the photographs, weigh the conversation over the statements. The statements were
 written after the argument started and are aimed at you; the messages were written while it
@@ -82,7 +86,7 @@ Answer with JSON only:
 findings comes first because it is the working, not the summary: two to five entries, each
 one thing you actually read that changed your mind. "from" must name where it came from and
 must be exactly one of: "owner statement", "renter statement", "conversation", "owner
-photo", "renter photo", "check-in photo", "check-out photo".
+photo", "renter photo", "check-in photo", "check-out photo", "listing", "listing photo".
 
 Two rules about "from", and they matter more than the verdict:
 - Only name a source that was actually given to you above. If a photograph or a
@@ -111,7 +115,16 @@ export type Handover = {
   takenAt: string;
 };
 
+/** What the owner advertised, which predates every other piece of evidence here. */
+export type Listing = {
+  title: string;
+  description: string;
+  postedAt: string;
+  imageDataUrls: string[];
+};
+
 export async function arbitrate(input: {
+  listing: Listing | null;
   evidence: Evidence[];
   handover: Handover[];
   chat: { sender: "owner" | "renter"; body: string; at: string }[];
@@ -122,6 +135,16 @@ export async function arbitrate(input: {
         `The ${entry.side} says, submitted ${entry.submittedAt}:\n${entry.statement}`
     )
     .join("\n\n");
+
+  // Split in two on purpose. When it was posted and how many photographs came with it are
+  // facts the server holds; the title and the description are text the owner typed, and
+  // they go inside the untrusted block with everything else somebody could write to order.
+  const listingNote = input.listing
+    ? `The listing was posted ${input.listing.postedAt} with ${input.listing.imageDataUrls.length} photograph(s), shown first.`
+    : "The listing this rental came from is no longer available.";
+  const advertised = input.listing
+    ? `The listing said:\nTitle: ${input.listing.title}\n${input.listing.description}`
+    : "";
 
   // Ordered check-in first, because the whole value of the pair is the comparison and a
   // model shown them backwards would read the repair as the damage.
@@ -143,14 +166,17 @@ export async function arbitrate(input: {
     system: POLICY,
     // The handover note sits outside the untrusted block because the server wrote it: the
     // phases and the times come from the chain and the database, not from either party.
-    text: `${handoverNote}\n\n<untrusted>\n${said}\n\nConversation:\n${conversation}\n</untrusted>`,
+    text: `${listingNote}\n${handoverNote}\n\n<untrusted>\n${advertised}\n\n${said}\n\nConversation:\n${conversation}\n</untrusted>`,
     // Whole and separate, never stacked. They were dropped entirely for a while because two
     // of them plus this text came to about 8100 tokens against the previous provider's 8000
     // a minute. Measured on this one: two images cost 2178 tokens and the entire call 2453,
     // against an allowance in the hundreds of thousands.
     //
     // Handover pair first so the order matches the note above, then what each side filed.
+    // Oldest first throughout: what was advertised, then each handover, then what was filed
+    // once the argument had started. The order is the argument.
     images: [
+      ...(input.listing?.imageDataUrls ?? []),
       ...handover.map((photo) => photo.imageDataUrl),
       ...input.evidence
         .map((entry) => entry.imageDataUrl)

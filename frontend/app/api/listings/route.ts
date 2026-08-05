@@ -138,6 +138,10 @@ async function createListing(request: Request) {
     title,
     description,
     images: await toDataUrls(images),
+    // The row exists by now, so the check is recorded against it. The preview call the
+    // browser makes at step 2 has no listing yet and is deliberately not logged: it is a
+    // rehearsal, and a log full of rehearsals hides the decisions that counted.
+    listingId: listing.id,
   });
 
   await applyVerdict(listing.id, owner, title, verdict);

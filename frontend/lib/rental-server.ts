@@ -32,6 +32,8 @@ export type OnChainRental = {
   owner: string;
   renter: string;
   status: Status;
+  /** The listing this came from, as bytes32. bytes32ToListingId turns it back into a uuid. */
+  listingId: `0x${string}`;
 };
 
 const client = () =>
@@ -62,7 +64,13 @@ export async function readRental(rentalId: unknown): Promise<OnChainRental> {
   // messages into a thread for a rental that does not exist.
   if (status === "None") throw new RentalError("No such rental.", 404);
 
-  return { id, owner: tuple[1].toLowerCase(), renter: tuple[2].toLowerCase(), status };
+  return {
+    id,
+    owner: tuple[1].toLowerCase(),
+    renter: tuple[2].toLowerCase(),
+    status,
+    listingId: tuple[0],
+  };
 }
 
 /** The same read, but refusing anyone who is not one of the two parties. */

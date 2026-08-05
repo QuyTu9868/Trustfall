@@ -2,6 +2,7 @@ import "server-only";
 import { MIN_CONFIDENCE, arbitrate } from "./arbitrate";
 import { NotSigned, signVerdict } from "./agent-signer";
 import { ARBITRATION_MODEL } from "./model";
+import { bytes32ToListingId } from "./escrow";
 import { readRental } from "./rental-server";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "./supabase-server";
 
@@ -31,6 +32,23 @@ export async function resolveDispute(rentalId: bigint) {
     .order("created_at");
 
   if (!evidence?.length) throw new NotSigned("Nobody has submitted anything yet.");
+
+  // What the owner advertised, which is older than anything else here. The chain stores the
+  // listing id as bytes32, so it has to be turned back into the uuid the database uses.
+  const listingId = bytes32ToListingId(rental.listingId);
+  const [{ data: listing }, { data: listingImages }] = await Promise.all([
+    supabase
+      .from("listings")
+      .select("title, description, created_at")
+      .eq("id", listingId)
+      .maybeSingle(),
+    supabase
+      .from("listing_images")
+      .select("url")
+      .eq("listing_id", listingId)
+      .order("sort_order")
+      .limit(2),
+  ]);
 
   // What the item looked like at each handover. Taken before either side knew there would
   // be an argument, which is what makes the pair worth more than anything filed afterwards.
@@ -65,7 +83,30 @@ export async function resolveDispute(rentalId: bigint) {
 
   const filedPhotos = evidence.filter((row) => row.image_path && photos.has(row.image_path)).length;
 
+  // Listing images live in a public bucket, so they are plain URLs rather than storage
+  // paths and are fetched directly. One that will not load is left out, same as the rest.
+  const listingPhotos: string[] = [];
+  for (const image of listingImages ?? []) {
+    try {
+      const response = await fetch(image.url);
+      if (!response.ok) continue;
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const type = response.headers.get("content-type") ?? "image/jpeg";
+      listingPhotos.push(`data:${type};base64,${buffer.toString("base64")}`);
+    } catch {
+      // Counted by what is in this array, never by what the query returned.
+    }
+  }
+
   const verdict = await arbitrate({
+    listing: listing
+      ? {
+          title: listing.title,
+          description: listing.description,
+          postedAt: listing.created_at,
+          imageDataUrls: listingPhotos,
+        }
+      : null,
     handover: handoverPhotos,
     evidence: evidence.map((row) => ({
       side: row.side as "owner" | "renter",
@@ -114,7 +155,7 @@ export async function resolveDispute(rentalId: bigint) {
       // What it actually read, recorded beside the ruling rather than assumed from the
       // fact that a photograph exists. A picture that failed to download is a picture the
       // arbitrator did not weigh, and only this line would ever say so.
-      evidence_seen: describe(handoverPhotos.length, filedPhotos),
+      evidence_seen: describe(listingPhotos.length, handoverPhotos.length, filedPhotos),
     },
     { onConflict: "onchain_rental_id" }
   );
@@ -174,8 +215,9 @@ async function downloadAll(
  * that failed to download is a picture that was not weighed, and this line is the only
  * thing that would ever say so.
  */
-function describe(handoverCount: number, filedCount: number) {
+function describe(listingCount: number, handoverCount: number, filedCount: number) {
   const parts = ["statements", "conversation"];
+  if (listingCount) parts.push(`${listingCount} listing photograph${listingCount === 1 ? "" : "s"}`);
   if (handoverCount) parts.push(`${handoverCount} handover photograph${handoverCount === 1 ? "" : "s"}`);
   if (filedCount) parts.push(`${filedCount} filed photograph${filedCount === 1 ? "" : "s"}`);
   return parts.length === 2

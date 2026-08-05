@@ -34,14 +34,35 @@ const COLUMNS =
   "onchain_rental_id, verdict, confidence, reason, signed, tx_hash, held_back_reason, model, evidence_seen, findings, created_at";
 
 async function list() {
-  const { data, error } = await getSupabaseAdmin()
-    .from("dispute_verdicts")
-    .select(COLUMNS)
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const supabase = getSupabaseAdmin();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ verdicts: data ?? [] });
+  // Both agents in one answer, because the question the page asks is what the agents have
+  // been doing and there are two of them. The listing checker runs far more often, so it
+  // is capped lower: a hundred rejections would bury four rulings about money.
+  const [verdicts, checks] = await Promise.all([
+    supabase
+      .from("dispute_verdicts")
+      .select(COLUMNS)
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("listing_checks")
+      .select("id, listing_id, decision, reasons, findings, model, created_at, listings(title)")
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
+
+  if (verdicts.error) return NextResponse.json({ error: verdicts.error.message }, { status: 500 });
+
+  return NextResponse.json({
+    verdicts: verdicts.data ?? [],
+    // A missing listing_checks table is not a reason to hide the rulings. Migration 010
+    // may not have been run yet, and the arbitrator log is the half that matters.
+    checks: (checks.data ?? []).map((row) => {
+      const { listings, ...rest } = row as typeof row & { listings: { title: string } | null };
+      return { ...rest, title: listings?.title ?? null };
+    }),
+  });
 }
 
 async function one(rentalId: number) {

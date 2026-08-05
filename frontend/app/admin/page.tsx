@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { OUTCOME, type Verdict } from "@/lib/admin-view";
+import { OUTCOME, type Check, type Verdict } from "@/lib/admin-view";
 
 /**
  * Every ruling the arbitrator reached, one line each.
@@ -21,6 +21,7 @@ import { OUTCOME, type Verdict } from "@/lib/admin-view";
  */
 export default function AdminPage() {
   const [verdicts, setVerdicts] = useState<Verdict[] | null>(null);
+  const [checks, setChecks] = useState<Check[]>([]);
   const [locked, setLocked] = useState(true);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     let active = true;
-    void (async () => {
+
+    const load = async () => {
       try {
         const response = await fetch("/api/admin");
         if (!active) return;
@@ -47,12 +49,19 @@ export default function AdminPage() {
           throw new Error(result.error ?? "The log could not be read.");
         }
         setVerdicts(result.verdicts as Verdict[]);
+        setChecks((result.checks ?? []) as Check[]);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "The log could not be read.");
       }
-    })();
+    };
+
+    void load();
+    // Slow, because a ruling only appears when somebody files the second statement, and
+    // the alternative is a page that quietly goes stale while an agent is working.
+    const timer = setInterval(load, 8000);
     return () => {
       active = false;
+      clearInterval(timer);
     };
   }, [reloads]);
 
@@ -183,6 +192,74 @@ export default function AdminPage() {
           </table>
         </div>
       )}
+
+      {/* The other agent, and the one that runs far more often. It moves no money, which is
+          why it is second, and it decides who gets to trade here, which is why it is on the
+          same page rather than out of sight. */}
+      <section className="flex flex-col gap-3 pt-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-2xl">What the listing checker did</h2>
+          <p className="text-sm text-ink-muted">
+            Every listing read before it went live, and what the checker saw in it.
+          </p>
+        </div>
+
+        {checks.length === 0 ? (
+          <p className="text-sm text-ink-muted">
+            No listings have been checked yet, or migration 010 has not been run.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {checks.map((check) => (
+              <article
+                key={check.id}
+                className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <span className="flex items-center gap-3">
+                    <span className="text-sm">{check.title ?? "A listing since deleted"}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
+                        check.decision === "approve"
+                          ? "bg-live-bg text-live-ink"
+                          : "bg-stop-bg text-stop-ink"
+                      }`}
+                    >
+                      {check.decision === "approve" ? "published" : "refused"}
+                    </span>
+                  </span>
+                  <span className="tabular text-xs text-ink-muted">
+                    {new Date(check.created_at).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* What the owner was shown. A refusal they cannot act on is a refusal they
+                    walk away from, so this is the half that has to be readable. */}
+                {check.reasons.length > 0 && (
+                  <ul className="flex flex-col gap-1 text-sm text-ink-muted">
+                    {check.reasons.map((reason, index) => (
+                      <li key={index}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+
+                {check.findings.length > 0 && (
+                  <dl className="flex flex-col gap-1 border-t border-line pt-2 text-xs">
+                    {check.findings.map((finding, index) => (
+                      <div key={index} className="flex gap-2">
+                        <dt className="shrink-0 tracking-wide text-ink-muted uppercase">
+                          {finding.from}
+                        </dt>
+                        <dd>{finding.says}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }
