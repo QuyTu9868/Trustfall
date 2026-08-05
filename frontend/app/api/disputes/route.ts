@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { errorResponse } from "@/lib/api";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { RentalError, readRentalAsParty } from "@/lib/rental-server";
@@ -169,8 +169,12 @@ export async function POST(request: Request) {
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const ruling = await maybeArbitrate(rental.id);
-    return NextResponse.json({ ok: true, ruling }, { status: 201 });
+    // Judged after the answer goes out, for the same reason publishing is. A measured call
+    // took sixty four seconds while the model was busy, and the person waiting had already
+    // done their part: the statement is saved, and nothing they can do changes what the
+    // arbitrator will say. DisputeBox polls every ten seconds and picks the ruling up.
+    after(() => maybeArbitrate(rental.id));
+    return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {
     if (error instanceof AuthError) return errorResponse(error, 401);
     if (error instanceof RentalError) return errorResponse(error, error.status);
