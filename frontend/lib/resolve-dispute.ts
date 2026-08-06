@@ -1,6 +1,7 @@
 import "server-only";
-import { MIN_CONFIDENCE, arbitrate } from "./arbitrate";
-import { NotSigned, signVerdict } from "./agent-signer";
+import { arbitrate } from "./arbitrate";
+import { NotSigned } from "./agent-signer";
+import { Blocked, propose } from "./agent-gateway";
 import { bytes32ToListingId } from "./escrow";
 import { readRental } from "./rental-server";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "./supabase-server";
@@ -135,53 +136,62 @@ export async function resolveDispute(rentalId: bigint) {
       })),
   });
 
-  // The bar. Below it nothing is signed, and nothing can be: the agent is the only address
-  // the contract accepts. Seven days after the dispute opened, anyone at all can finalise it
-  // and the deposit returns to the renter, which is the contract treating an unjudged
-  // dispute as the platform's failure rather than the renter's.
+  // Out through the gateway rather than straight to the signer. CLAUDE.md section 6 asks
+  // for exactly this order: the agent proposes over HTTP, something in the middle is
+  // allowed to refuse, and only then does the server sign. Calling signVerdict from here
+  // would leave that middle with nothing to inspect.
+  //
+  // The proposal names a rental and one of three words. No amount, no address, nothing
+  // about where money goes: the contract reads the deposit from its own storage and does
+  // the arithmetic, so a refused filter or a talked-into model can pick the wrong outcome
+  // and cannot invent a payment.
+  //
+  // The confidence bar is applied on the other side, not here. This copy would be the one
+  // an attacker removes, so the decision lives with the key.
   let signed = false;
   let txHash: string | null = null;
   let heldBack: string | null = null;
 
-  if (verdict.confidence < MIN_CONFIDENCE) {
-    heldBack = `Confidence ${verdict.confidence.toFixed(2)} is below ${MIN_CONFIDENCE}, so nothing was signed.`;
-  } else {
-    try {
-      txHash = await signVerdict(rentalId, verdict.verdict);
-      signed = true;
-    } catch (error) {
-      heldBack = error instanceof Error ? error.message : "Signing failed.";
-    }
-  }
-
-  const { error: logError } = await supabase.from("dispute_verdicts").upsert(
-    {
-      onchain_rental_id: Number(rentalId),
-      verdict: verdict.verdict,
-      confidence: verdict.confidence,
-      reason: verdict.reason,
-      findings: verdict.findings,
-      signed,
-      tx_hash: txHash,
-      held_back_reason: heldBack,
-      model: verdict.model,
-      // What it actually read, recorded beside the ruling rather than assumed from the
-      // fact that a photograph exists. A picture that failed to download is a picture the
-      // arbitrator did not weigh, and only this line would ever say so.
-      evidence_seen: describe(listingPhotos.length, handoverPhotos.length, filedPhotos),
-    },
-    { onConflict: "onchain_rental_id" }
-  );
-
-  // Loud, because of what silence costs here. This write failed once for a missing column
-  // and nobody noticed: the arbitrator had ruled, the server had signed, a deposit had
-  // moved on chain, and the only record of why was the one that did not get written. The
-  // money is already gone by this line, so throwing cannot undo it, but it does stop the
-  // caller reporting success on a decision nothing can now explain.
-  if (logError) {
-    throw new Error(
-      `Rental #${rentalId} was decided${signed ? " and signed" : ""} but the verdict could not be recorded: ${logError.message}`
+  try {
+    const answer = await propose<{ signed: boolean; txHash: string | null; heldBack: string | null }>(
+      "/api/agent/resolve-dispute",
+      {
+        rentalId: rentalId.toString(),
+        verdict: verdict.verdict,
+        confidence: verdict.confidence,
+        reason: verdict.reason,
+        findings: verdict.findings,
+        model: verdict.model,
+        evidenceSeen: describe(listingPhotos.length, handoverPhotos.length, filedPhotos),
+      }
     );
+    signed = answer.signed;
+    txHash = answer.txHash;
+    heldBack = answer.heldBack;
+  } catch (error) {
+    // A refusal is a result, not a failure to retry past. It is written down so the log
+    // says a decision was reached and stopped at the gate, which is the whole reason the
+    // gate is worth having.
+    if (error instanceof Blocked) {
+      heldBack = `Blocked by policy${error.deniedBy ? ` (${error.deniedBy})` : ""}: ${error.reason}`;
+      await supabase.from("dispute_verdicts").upsert(
+        {
+          onchain_rental_id: Number(rentalId),
+          verdict: verdict.verdict,
+          confidence: verdict.confidence,
+          reason: verdict.reason,
+          findings: verdict.findings,
+          signed: false,
+          tx_hash: null,
+          held_back_reason: heldBack,
+          model: verdict.model,
+          evidence_seen: describe(listingPhotos.length, handoverPhotos.length, filedPhotos),
+        },
+        { onConflict: "onchain_rental_id" }
+      );
+    } else {
+      throw error;
+    }
   }
 
   return { ...verdict, signed, txHash, heldBack };

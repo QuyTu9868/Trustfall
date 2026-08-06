@@ -1,7 +1,7 @@
 import "server-only";
 import { targetChain } from "./chain";
 import { MODERATION_MODEL, ModelUnavailable, askModel } from "./model";
-import { getSupabaseAdmin } from "./supabase-server";
+import { Blocked, propose } from "./agent-gateway";
 
 export { toDataUrls } from "./model";
 
@@ -142,7 +142,31 @@ Description: ${input.description}
     });
     const verdict = { ...readVerdict(answer.text), model: answer.model };
 
-    if (input.listingId) await record(input.listingId, verdict);
+    // Out through the gateway, same as the arbitrator. This agent moves no money, which is
+    // why it is easy to forget: it decides who gets to trade here at all, and a policy that
+    // watches only the expensive half is a policy with a blind side.
+    //
+    // A refusal leaves the listing exactly where it was, at pending. That is recoverable
+    // from the owner's own page, and it is the safe direction: a gate that fails open is
+    // not a gate.
+    if (input.listingId) {
+      try {
+        await propose("/api/agent/publish-listing", {
+          listingId: input.listingId,
+          decision: verdict.decision,
+          reasons: verdict.reasons,
+          findings: verdict.findings,
+          model: verdict.model,
+        });
+      } catch (error) {
+        if (error instanceof Blocked) {
+          throw new ModerationUnavailable(
+            `The gateway refused to publish this${error.deniedBy ? ` (${error.deniedBy})` : ""}: ${error.reason}`
+          );
+        }
+        throw error;
+      }
+    }
     return verdict;
   } catch (error) {
     // Reworded for the person publishing. They do not care which provider is busy, only
@@ -154,25 +178,6 @@ Description: ${input.description}
 
 /** Named so the admin log can record which model reached a verdict. */
 export { MODERATION_MODEL } from "./model";
-
-/**
- * Writes the check down, and never stops a publish over it.
- *
- * The opposite call from the one the arbitrator makes: there, a verdict that could not be
- * recorded had already moved money and the caller had to be told. Here nothing has moved,
- * the owner is waiting, and refusing to publish a clean listing because a log row failed
- * would be a worse outcome than a gap in the log.
- */
-async function record(listingId: string, verdict: Verdict) {
-  const { error } = await getSupabaseAdmin().from("listing_checks").insert({
-    listing_id: listingId,
-    decision: verdict.decision,
-    reasons: verdict.reasons,
-    findings: verdict.findings,
-    model: verdict.model,
-  });
-  if (error) console.error("Could not record the listing check:", error.message);
-}
 
 /**
  * Turns whatever came back into a decision.

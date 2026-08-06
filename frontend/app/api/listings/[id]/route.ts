@@ -3,7 +3,7 @@ import { errorResponse } from "@/lib/api";
 import { ModerationUnavailable, moderateListing } from "@/lib/moderation";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { LISTING_IMAGE_BUCKET, getSupabaseAdmin } from "@/lib/supabase-server";
-import { applyVerdict, firstTextProblem } from "../route";
+import { firstTextProblem } from "../route";
 
 /**
  * Reads one listing back with its images.
@@ -109,7 +109,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       listingId: id,
     });
 
-    await applyVerdict(id, owner, title, verdict);
+    // Applied by the gateway route, reached from inside moderateListing above.
 
     return NextResponse.json(
       { id, decision: verdict.decision, reasons: verdict.reasons },

@@ -252,7 +252,7 @@ export function RentalCard({
               <Action
                 onClick={() => setPanel({ kind: "scan", at: rental.status })}
               >
-                Scan the renter's return code
+                Scan the renter&apos;s return code
               </Action>
             )}
 

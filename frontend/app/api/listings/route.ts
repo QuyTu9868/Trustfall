@@ -10,7 +10,7 @@ import {
   type Category,
 } from "@/lib/listing";
 import { ModerationUnavailable, moderateListing, toDataUrls } from "@/lib/moderation";
-import { notifyListingCheckFailed, notifyListingVerdict } from "@/lib/notify";
+import { notifyListingCheckFailed } from "@/lib/notify";
 import {
   AuthError,
   readIdentityToken,
@@ -142,7 +142,7 @@ async function createListing(request: Request) {
   const photos = await toDataUrls(images);
   after(async () => {
     try {
-      const verdict = await moderateListing({
+      await moderateListing({
         title,
         description,
         images: photos,
@@ -151,7 +151,10 @@ async function createListing(request: Request) {
         // a rehearsal, and a log full of rehearsals hides the decisions that counted.
         listingId: listing.id,
       });
-      await applyVerdict(listing.id, owner, title, verdict);
+      // Nothing to apply here any more. Passing listingId sends the decision out through
+      // the gateway, and the route on the other side is what updates the row, records the
+      // check and rings the bell. Doing it here as well would apply the same verdict twice
+      // and would put the half a policy is meant to guard back inside this process.
     } catch (error) {
       // Nobody is waiting on this response any more, so a failure that goes only to the
       // console is a listing stuck at pending with its owner never told why. The row stays
@@ -166,33 +169,6 @@ async function createListing(request: Request) {
   return NextResponse.json({ id: listing.id, pending: true }, { status: 202 });
 }
 
-/**
- * Records what the checker decided and tells the owner.
- *
- * Shared with the resubmit route so a listing checked twice cannot end up following two
- * slightly different rules about what approved means.
- */
-export async function applyVerdict(
-  listingId: string,
-  owner: string,
-  title: string,
-  verdict: { decision: "approve" | "reject"; reasons: string[] }
-) {
-  const approved = verdict.decision === "approve";
-
-  await getSupabaseAdmin()
-    .from("listings")
-    .update({
-      status: approved ? "published" : "draft",
-      moderation_status: approved ? "approved" : "rejected",
-      // Kept even when approved, cleared to null, so a listing that was rejected and then
-      // fixed does not carry the old complaint around forever.
-      moderation_reason: approved ? null : verdict.reasons.join(" "),
-    })
-    .eq("id", listingId);
-
-  await notifyListingVerdict(owner, listingId, title, verdict);
-}
 
 type Incoming = {
   category: string;

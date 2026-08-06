@@ -695,6 +695,22 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   nhớ ra.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-06] Thử một endpoint biết ký, bằng id thật đang được dùng
+
+- **Chuyện gì xảy ra:** Kiểm lớp chặn bí mật của route ký phán quyết. Ba ca: không header,
+  sai header, đúng header. Hai ca đầu trả 401, đúng ý. Ca thứ ba dùng `rentalId: 1`, là đơn
+  user đang test và đang ở trạng thái Disputed, nên nó **đi hết đường và ký thật**: đơn #1
+  thành Completed, cọc về renter, lý do ghi đúng chữ `"x"` mình gõ bừa. Trên Sepolia, không
+  hoàn tác được.
+- **Sai ở đâu:** Viết ca kiểm để chứng minh "đường thuận chạy được", trên một endpoint mà
+  đường thuận của nó là **chuyển tiền**. Hai ca từ chối thì vô hại, ca chấp nhận thì không,
+  mà mình gom cả ba vào một vòng lặp như thể chúng cùng loại rủi ro.
+- **Luật rút ra:** Thử endpoint có tác dụng phụ thì chọn dữ liệu **không thể thành công**:
+  id không tồn tại, hoặc bản ghi ở sai trạng thái. Lớp chặn cần kiểm nằm **trước** các lớp
+  sau, nên một phản hồi 404 hay 409 chứng minh nó đã lọt qua y hệt như 200, mà không để lại
+  gì. Muốn thấy 200 thì dựng riêng một bản ghi dùng một lần, đừng mượn của người khác.
+- **Skill đích:** `code-change-workflow`
+
 ### [2026-08-05] Deploy testnet quá muộn, và trả giá suốt quãng giữa
 
 - **Chuyện gì xảy ra:** Trustfall làm gần trọn dự án trên Hardhat node, chỉ lên Sepolia ở
