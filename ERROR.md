@@ -719,6 +719,13 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   "vẫn không giải quyết triệt để". Đúng, đó là vá triệu chứng của một quyết định sai về
   thời điểm.
 - **Local chain còn dùng cho gì:** `forge test`, và lúc đang viết contract. Hết.
+- **Deploy testnet xong thì xoá dữ liệu của chain Hardhat node đi.** Cụ thể là mục
+  `"31337"` trong `deployed.json` và mọi dòng off-chain khoá theo `rental_id` của chain cũ.
+  Địa chỉ trong đó trỏ tới contract trên một chain đã biến mất, mà nhìn thì y hệt địa chỉ
+  thật. Giữ lại là để sẵn một thứ chỉ chờ đọc nhầm. Lưu ý phân biệt: **xoá dữ liệu, không
+  xoá các lớp chặn có nhắc tới 31337** - những chỗ như `moderationBypassed()` dùng chain id
+  để bảo đảm nút tắt kiểm duyệt không bao giờ chạy được ngoài local, gỡ nó đi là mở đường
+  đăng tin không qua kiểm duyệt trên mạng thật.
 - **Lúc nào thì nhắc user deploy:** **chỉ khi và đúng khi tới bước test flow của dApp.**
   Không nhắc sớm hơn, vì contract chưa chốt thì deploy là tự chuốc một lần deploy lại. Không
   nhắc muộn hơn, vì từ giây phút bắt đầu bấm thử cả luồng thì mỗi lần chain local reset là
