@@ -719,6 +719,11 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   "vẫn không giải quyết triệt để". Đúng, đó là vá triệu chứng của một quyết định sai về
   thời điểm.
 - **Local chain còn dùng cho gì:** `forge test`, và lúc đang viết contract. Hết.
+- **Lúc nào thì nhắc user deploy:** **chỉ khi và đúng khi tới bước test flow của dApp.**
+  Không nhắc sớm hơn, vì contract chưa chốt thì deploy là tự chuốc một lần deploy lại. Không
+  nhắc muộn hơn, vì từ giây phút bắt đầu bấm thử cả luồng thì mỗi lần chain local reset là
+  một lần mất trạng thái đang dở. Mốc đó nhận ra được: hết viết contract, hết viết test
+  contract, bắt đầu ngồi bấm tay qua từng màn hình.
 - **Skill đích:** `deploy-verify-contract`
 
 ### [2026-08-05] `git diff --stat` cho qua, vì file có đổi, chỉ là đổi thiếu
