@@ -11,12 +11,32 @@
  * hardhat node ends up still holding port 8545 an hour later.
  */
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const contracts = join(root, "contracts");
 const frontend = join(root, "frontend");
+
+/**
+ * Which chain the app is actually pointed at.
+ *
+ * Everything below the frontend is only worth starting when the answer is the local node.
+ * Once NEXT_PUBLIC_CHAIN_ID names a real network, spinning up Hardhat and deploying to it
+ * produces a chain nobody reads and addresses nobody uses, which is worse than doing
+ * nothing: it looks like the stack is running when half of it is decoration.
+ */
+function targetChainId() {
+  try {
+    const env = readFileSync(join(frontend, ".env.local"), "utf8");
+    const found = /^\s*NEXT_PUBLIC_CHAIN_ID\s*=\s*(\d+)/m.exec(env);
+    // Absent means the app's own default, which is the local node.
+    return found ? Number(found[1]) : 31337;
+  } catch {
+    return 31337;
+  }
+}
 
 const RPC = "http://127.0.0.1:8545";
 const WAIT_MS = 60_000;
@@ -78,6 +98,14 @@ function finished(child, label) {
 }
 
 async function main() {
+  const chainId = targetChainId();
+  if (chainId !== 31337) {
+    console.log(`The app is pointed at chain ${chainId}, so there is no local stack to start.`);
+    console.log("Starting next dev on its own.\n");
+    run("npm run dev", frontend);
+    return;
+  }
+
   // A node that is already up is left alone, and that is the whole point of asking.
   // Restarting it wipes the chain: rental ids go back to 1 while Supabase still holds rows
   // keyed to the old ones, and every wallet's nonce is suddenly ahead of a chain that has
