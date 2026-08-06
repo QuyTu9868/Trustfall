@@ -12,7 +12,10 @@ export const wagmiConfig = createConfig({
   chains: [hardhat, sepolia],
   transports: {
     [hardhat.id]: http(localRpcUrl),
-    [sepolia.id]: http(),
+    // Named rather than left to viem's default, which is a shared public-good endpoint
+    // with rate limits the rentals page reaches while polling. Only the NEXT_PUBLIC_ copy
+    // exists here: this file runs in the browser, where the other one is not readable.
+    [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL),
   },
   ssr: true,
 });

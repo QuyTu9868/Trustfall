@@ -76,6 +76,41 @@ export async function notify(
  * Worth its own notification. The listing sits at pending, which looks identical to still
  * being checked, and without this the owner waits for a bell that is never going to ring.
  */
+/**
+ * Tells the other side that a handover photograph has arrived.
+ *
+ * Its own function rather than a NotificationKind, because the two phases need two kinds:
+ * the unique index is (recipient, kind, rental), so one shared kind would let the check-out
+ * photograph silently overwrite the notification about the check-in one.
+ *
+ * The note goes in the body when there is one. A photograph nobody is told about is a
+ * photograph that gets seen for the first time during an argument, which is late.
+ */
+export async function notifyHandoverPhoto(
+  recipient: string,
+  rentalId: bigint,
+  phase: "checkin" | "checkout",
+  note: string | null
+) {
+  const when = phase === "checkin" ? "collected" : "came back";
+  const body = note
+    ? `A photograph of the item as it ${when}, with a note: "${note}"`
+    : `A photograph of the item as it ${when}.`;
+
+  const { error } = await getSupabaseAdmin().from("notifications").upsert(
+    {
+      recipient_address: recipient,
+      kind: `handover-${phase}`,
+      onchain_rental_id: Number(rentalId),
+      body,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    },
+    { onConflict: "recipient_address,kind,onchain_rental_id" }
+  );
+  if (error) console.error("Could not write the handover notification:", error.message);
+}
+
 export async function notifyListingCheckFailed(owner: string, listingId: string, title: string) {
   const { error } = await getSupabaseAdmin().from("notifications").upsert(
     {

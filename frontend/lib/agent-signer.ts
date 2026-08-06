@@ -1,7 +1,7 @@
 import "server-only";
 import { createWalletClient, http, publicActions } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { localRpcUrl, targetChain } from "./chain";
+import { rpcUrl, targetChain } from "./chain";
 import type { DisputeVerdict } from "./arbitrate";
 import { escrowAbi, escrowAddress } from "./escrow";
 
@@ -46,7 +46,7 @@ export async function signVerdict(rentalId: bigint, verdict: DisputeVerdict["ver
   const client = createWalletClient({
     account: privateKeyToAccount(key as `0x${string}`),
     chain: targetChain,
-    transport: http(targetChain.id === 31337 ? localRpcUrl : undefined),
+    transport: http(rpcUrl()),
   }).extend(publicActions);
 
   // Simulated first. A revert here is the contract refusing, and finding that out before

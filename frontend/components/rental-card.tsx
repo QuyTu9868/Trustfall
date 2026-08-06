@@ -245,11 +245,14 @@ export function RentalCard({
                 Show the return code
               </Action>
             )}
+            {/* The owner sends this transaction, but the renter has to sign the code first,
+                so a label reading like a unilateral action was a promise the contract will
+                not keep: pressed without a code, it reverts on a missing signature. */}
             {isOwner && rental.status === "Active" && (
               <Action
                 onClick={() => setPanel({ kind: "scan", at: rental.status })}
               >
-                Scan to take it back
+                Scan the renter's return code
               </Action>
             )}
 

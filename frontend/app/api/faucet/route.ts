@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createWalletClient, erc20Abi, http, parseUnits, publicActions } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { errorResponse } from "@/lib/api";
-import { localRpcUrl, targetChain } from "@/lib/chain";
+import { rpcUrl, targetChain } from "@/lib/chain";
 import { getMockUsdcAddress, mockUsdcAbi } from "@/lib/contracts";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const wallet = createWalletClient({
       account: privateKeyToAccount(key.startsWith("0x") ? (key as `0x${string}`) : `0x${key}`),
       chain: targetChain,
-      transport: http(targetChain.id === 31337 ? localRpcUrl : undefined),
+      transport: http(rpcUrl()),
     }).extend(publicActions);
 
     const held = await wallet.readContract({

@@ -1,6 +1,6 @@
 import "server-only";
 import { createPublicClient, http } from "viem";
-import { localRpcUrl, targetChain } from "./chain";
+import { rpcUrl, targetChain } from "./chain";
 import {
   STATUS,
   type Status,
@@ -39,7 +39,7 @@ export type OnChainRental = {
 const client = () =>
   createPublicClient({
     chain: targetChain,
-    transport: http(targetChain.id === 31337 ? localRpcUrl : undefined),
+    transport: http(rpcUrl()),
   });
 
 export async function readRental(rentalId: unknown): Promise<OnChainRental> {

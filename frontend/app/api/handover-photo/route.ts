@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
+import { notifyHandoverPhoto } from "@/lib/notify";
 import { readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { readRentalAsParty } from "@/lib/rental-server";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "@/lib/supabase-server";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_NOTE = 500;
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /**
@@ -36,6 +38,13 @@ export async function POST(request: Request) {
     const image = form.get("image");
     if (!(image instanceof File) || image.size === 0) {
       return NextResponse.json({ error: "No photo." }, { status: 400 });
+    }
+
+    // Optional. Most handovers have nothing to say, and demanding a sentence produces "ok"
+    // and teaches everybody to skip reading the field.
+    const note = String(form.get("note") ?? "").trim();
+    if (note.length > MAX_NOTE) {
+      return NextResponse.json({ error: "That note is too long." }, { status: 400 });
     }
     if (!IMAGE_TYPES.includes(image.type)) {
       return NextResponse.json({ error: "Photos must be JPG, PNG or WebP." }, { status: 400 });
@@ -95,6 +104,7 @@ export async function POST(request: Request) {
       phase,
       image_path: path,
       uploaded_by: caller,
+      note: note || null,
     });
 
     if (error?.code === "23505") {
@@ -104,6 +114,11 @@ export async function POST(request: Request) {
       );
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // The other party, worked out from the chain rather than from the request. A photograph
+    // nobody is told about is one that gets seen for the first time during an argument.
+    const other = caller === rental.owner ? rental.renter : rental.owner;
+    await notifyHandoverPhoto(other, rental.id, phase, note || null);
 
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -121,7 +136,7 @@ export async function GET(request: Request) {
     const supabase = getSupabaseAdmin();
     const { data } = await supabase
       .from("handover_photos")
-      .select("phase, image_path, created_at")
+      .select("phase, image_path, note, created_at")
       .eq("onchain_rental_id", Number(rental.id));
 
     const links = new Map<string, string>();
@@ -140,6 +155,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       photos: (data ?? []).map((row) => ({
         phase: row.phase,
+        note: row.note,
         created_at: row.created_at,
         image_url: links.get(row.image_path) ?? null,
       })),

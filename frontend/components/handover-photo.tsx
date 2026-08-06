@@ -3,7 +3,12 @@
 import { useIdentityToken } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
 
-type Photo = { phase: "checkin" | "checkout"; created_at: string; image_url: string | null };
+type Photo = {
+  phase: "checkin" | "checkout";
+  note: string | null;
+  created_at: string;
+  image_url: string | null;
+};
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -40,6 +45,8 @@ export function HandoverPhoto({
 }) {
   const { identityToken } = useIdentityToken();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
+  const [note, setNote] = useState("");
+  const [chosen, setChosen] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
@@ -63,18 +70,27 @@ export function HandoverPhoto({
     };
   }, [rentalId, identityToken, reloads]);
 
-  async function upload(file: File) {
-    if (file.size > MAX_IMAGE_BYTES) {
+  function choose(file: File | null) {
+    if (file && file.size > MAX_IMAGE_BYTES) {
       setError("That photo is over 5MB.");
       return;
     }
+    setError(null);
+    setChosen(file);
+  }
+
+  async function upload() {
+    if (!chosen || sending) return;
     setSending(true);
     setError(null);
     try {
       const body = new FormData();
       body.set("rentalId", rentalId.toString());
       body.set("phase", phase);
-      body.set("image", file);
+      body.set("image", chosen);
+      // Sent even when empty, so the server decides what an empty note means rather than
+      // the browser deciding whether to mention it at all.
+      body.set("note", note.trim());
       const response = await fetch("/api/handover-photo", {
         method: "POST",
         headers: identityToken ? { "privy-id-token": identityToken } : undefined,
@@ -82,6 +98,8 @@ export function HandoverPhoto({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "That did not upload.");
+      setChosen(null);
+      setNote("");
       setReloads((count) => count + 1);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "That did not upload.");
@@ -101,6 +119,7 @@ export function HandoverPhoto({
           Photographed at {phase === "checkin" ? "check-in" : "check-out"},{" "}
           {new Date(taken.created_at).toLocaleString()}
         </span>
+        {taken.note && <p className="text-sm whitespace-pre-wrap break-words">{taken.note}</p>}
         {taken.image_url && (
           /* object-contain, because a handover photo cropped square can hide the very
              damage it was taken to record. */
@@ -124,22 +143,42 @@ export function HandoverPhoto({
         <p className="text-xs text-ink-muted">{WORDING[phase].why}</p>
       </div>
 
+      {/* The note is written before sending rather than after, because the picture and the
+          sentence about it are one act. Uploading first and asking afterwards produces a
+          photograph with no note, every time. */}
+      <textarea
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        rows={2}
+        maxLength={500}
+        placeholder="What should the other person look at? Optional, and it goes with the photo."
+        className="rounded-control border border-line bg-surface px-3 py-2 text-sm"
+      />
+
       <div className="flex flex-wrap items-center gap-3">
-        <label className="cursor-pointer rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas">
-          {sending ? "Uploading..." : "Add the photo"}
+        <label className="cursor-pointer rounded-control border border-line bg-surface px-4 py-2 text-sm">
+          {chosen ? "Change photo" : "Choose a photo"}
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
             capture="environment"
             disabled={sending}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void upload(file);
-            }}
+            onChange={(event) => choose(event.target.files?.[0] ?? null)}
             className="hidden"
           />
         </label>
-        <span className="text-xs text-ink-muted">One photo, and it cannot be replaced.</span>
+
+        <button
+          onClick={upload}
+          disabled={sending || !chosen}
+          className="rounded-control bg-ink-strong px-4 py-2 text-sm text-canvas disabled:opacity-40"
+        >
+          {sending ? "Sending..." : "Send it"}
+        </button>
+
+        <span className="text-xs text-ink-muted">
+          {chosen ? chosen.name : "One photo, and it cannot be replaced."}
+        </span>
       </div>
 
       {error && <p className="text-xs text-stop-ink">{error}</p>}

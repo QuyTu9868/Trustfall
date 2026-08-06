@@ -15,3 +15,27 @@ export const targetChain =
   supportedChains.find((chain) => chain.id === configuredId) ?? hardhat;
 
 export const localRpcUrl = "http://127.0.0.1:8545";
+
+/**
+ * Which node to talk to, for whichever chain this build is pointed at.
+ *
+ * Returning undefined means "whatever viem thinks the default is", and on Sepolia that
+ * default is a shared public-good endpoint with strict rate limits. The rentals page polls
+ * a contract, so it reached those limits within minutes and every read came back 429.
+ *
+ * Two variables for one value. The server reads SEPOLIA_RPC_URL, which stays on the server.
+ * The browser can only see NEXT_PUBLIC_SEPOLIA_RPC_URL, which is compiled into the bundle
+ * and is therefore public: acceptable for a testnet key whose only cost is quota, and worth
+ * restricting by domain in the provider's dashboard before showing anybody the link.
+ *
+ * Falls through to undefined when neither is set, which keeps a fresh checkout working
+ * badly rather than not at all.
+ */
+export function rpcUrl(): string | undefined {
+  if (targetChain.id === hardhat.id) return localRpcUrl;
+  return (
+    process.env.SEPOLIA_RPC_URL ||
+    process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ||
+    undefined
+  );
+}
