@@ -695,6 +695,23 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
   nhớ ra.
 - **Skill đích:** `agentic-engineering`
 
+### [2026-08-06] Tưởng đã khởi động lại, thật ra đang đo bản cũ
+
+- **Chuyện gì xảy ra:** Dùng `pkill -f "next dev"` để tắt server trước mỗi lần chạy lại.
+  Trên Windows lệnh đó **không giết được gì**, và nó im lặng, không báo lỗi, trả về như đã
+  xong. Bản mới thấy cổng 3000 bận nên tự nhảy sang 3001, mình `curl` vào 3000 thấy 200 rồi
+  kết luận "chạy tốt". Đo đúng cái bản cũ mình vừa tưởng đã tắt. Lần khác, log lẫn giữa hai
+  tiến trình làm mình đọc sai một nhánh code.
+- **Sai ở đâu:** Coi lệnh tắt là đã tắt. Không có phép kiểm nào giữa "ra lệnh dừng" và "đo
+  kết quả", nên một lệnh vô hiệu biến mọi phép đo sau đó thành đo nhầm đối tượng, mà vẫn
+  trông như bằng chứng.
+- **Luật rút ra:** Trên Windows, tắt tiến trình phải giết **theo cổng**:
+  `Get-NetTCPConnection -LocalPort <cổng> -State Listen` rồi `Stop-Process -Force`. Khởi
+  động lại xong phải **đọc dòng `Local:` trong log** để chắc nó chiếm đúng cổng sắp đo.
+- **Dấu hiệu nhận biết:** thấy app nhảy sang cổng khác (3001 thay vì 3000) là bản cũ còn
+  sống. Đừng đo tiếp, đi giết nó trước.
+- **Skill đích:** `code-change-workflow`
+
 ### [2026-08-06] Thử một endpoint biết ký, bằng id thật đang được dùng
 
 - **Chuyện gì xảy ra:** Kiểm lớp chặn bí mật của route ký phán quyết. Ba ca: không header,
