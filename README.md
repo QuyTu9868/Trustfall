@@ -3,7 +3,7 @@
 Rent real things from strangers, with the money held by a smart contract and the arguments
 settled by an AI agent that cannot pay itself.
 
-Live demo: not deployed yet, coming to Vercel.
+Live demo: **https://trustfall-latch.vercel.app**
 
 ## What it does
 
