@@ -41,50 +41,75 @@ and everything after it re-checks the request from scratch.
 Six filters, in this order. First deny wins, so the cheap ones are first and the model of the
 body is last.
 
+The template that seeds a new latch lays six filters out in roughly this order already, but
+three of them arrive pointed the wrong way. Every one of the three looks configured.
+
 ### 1. method
 
 | Field | Value |
 |---|---|
-| Allowed methods | `POST` |
-| condition | **none** |
+| ALLOWED METHODS | `POST` only, every other verb unlit |
+| WHEN CLAUSE | `always runs` |
 
-### 2. endpoint
+### 2. rate_limit
 
 | Field | Value |
 |---|---|
-| mode | `allowlist` |
-| patterns | `/api/agent/**` |
-| condition | **none** |
+| MAX REQUESTS | `60` |
+| WINDOW (SECONDS) | `3600` |
+| KEYED BY | `Latch: single bucket per token` |
+| WHEN CLAUSE | `always runs` |
+
+The template offers `10 / 60s`, which is the wrong axis. It caps a burst and permits six
+hundred calls an hour, and the thing actually worth protecting is the model budget: at that
+rate a runaway loop eats a whole day of Gemini quota before lunch.
+
+Sixty an hour is the other way round. No demo session ever reaches it, and a loop cannot
+spend more than sixty calls before it stops. A rate limit that fires while somebody is being
+shown the product has cost more than it saved.
+
+Both routes share the bucket, because one token is one agent however many jobs it does.
+
+Simulate does not count requests, so this is the one filter that stays unproven until
+production.
+
+### 3. endpoint
+
+| Field | Value |
+|---|---|
+| MODE | **`Allowlist: only listed paths`** |
+| GLOB PATTERNS | `/api/agent/**` |
+| WHEN CLAUSE | `always runs` |
 
 `**` matches any depth, so this covers `/api/agent/resolve-dispute` and
 `/api/agent/publish-listing` and nothing else in the app.
 
-Remove the condition if the builder added one. A `pathPrefix` here would switch the filter
-off for every path that is not the agent's, which is the entire set of paths it exists to
-refuse. Without this filter the agent's token opens the whole API, including the upload
-routes and the mint faucet.
+**The template arrives on `Blocklist: all except listed` with this same pattern already
+filled in, and that is exactly inverted.** Blocklist means the listed paths are the refused
+ones, so the latch would deny the only two routes the agent needs and forward everything
+else with the credential attached: the upload routes, the mint faucet, the whole API. The
+pattern being right makes it worse, because the summary line reads plausibly and the mode is
+one word.
 
-### 3. rate_limit
-
-| Field | Value |
-|---|---|
-| Limit | `20` |
-| Window | `1 hour` |
-| Key | latch |
-
-A dispute is judged once. Twenty an hour is far above any honest use and low enough that a
-loop stops being able to spend the model budget.
-
-Simulate does not count requests, so this one is only provable in production.
+Read the pipeline summary. `blocklist: /api/agent/**` is the broken state, `allowlist:
+/api/agent/**` is the one you want.
 
 ### 4. payload, the dispute route
 
 | Field | Value |
 |---|---|
-| condition | `pathPrefix = /api/agent/resolve-dispute` |
+| WHEN CLAUSE | `active`, METHODS all unlit, PATH PREFIX `/api/agent/resolve-dispute` |
 
 This is the honest use of a condition: the filter really does only apply to one route, and
-the rules below name fields the other route does not have.
+the rules below name fields the other route does not have. Leave the METHODS row unlit,
+because filter 1 already settled that and a filter doing one thing is a filter you can read.
+
+**The template ships this condition already active with PATH PREFIX `/v1/admin`.** It is
+real text and not a placeholder, so the filter silently skips every request Trustfall
+actually sends and its eleven rules never run once. Overtype it.
+
+It also ships two rules whose path boxes are empty, showing `$.` and `(no value)`. Delete
+both and add these:
 
 | Path | Operator | Value |
 |---|---|---|
@@ -112,12 +137,16 @@ behind it destructures what it wants and the contract derives every figure itsel
 
 | Field | Value |
 |---|---|
-| condition | `pathPrefix = /api/agent/publish-listing` |
+| WHEN CLAUSE | `Add condition`, METHODS all unlit, PATH PREFIX `/api/agent/publish-listing` |
 
 | Path | Operator | Value |
 |---|---|---|
 | `$.listingId` | `exists` | |
 | `$.decision` | `in` | `approve,reject` |
+
+The template leaves this one empty, and it says so plainly: *No rules. Filter passes every
+request through.* That is the honest failure of the three, because the pipeline summary reads
+`payload` with nothing beside it rather than pretending to a count.
 
 No blocklist here. This route moves no money and takes no amount, so there is no field worth
 naming; the whole risk on this side is the decision itself, and that is what `in` pins down.
@@ -126,16 +155,30 @@ naming; the whole risk on this side is the decision itself, and that is what `in
 
 | Field | Value |
 |---|---|
-| language | `javascript` |
-| code | the contents of `verdict-authority.js` |
-| condition | **none** |
+| language | `RUST` |
+| CODE | the contents of `verdict-authority.rs` |
+| WHEN CLAUSE | `always runs` |
 
-No condition needed: the code only ever denies when it sees `verdict: "pay_owner"`, and the
+Rust rather than JavaScript, which is what the template offers and what the dashboard badge
+says. Latch compiles it to WASM and can run it inside the enclave, and the editor prints
+`compiled - runs verified` once it builds. The body is dropped into
+
+```rust
+pub fn on_request(ctx: &RequestContext) -> PolicyResult { ... }
+```
+
+so there is no function signature to write, only statements ending in `PolicyResult::allow()`
+or `PolicyResult::deny("reason")`. `ctx` carries `method`, `path`, `headers`, `body`,
+`caller_ip`, `latch_id`, `upstream`, and the helpers `ctx.header(name)` and
+`ctx.body_field(key)`.
+
+No condition needed: the code only denies when it sees `verdict: "pay_owner"`, and the
 listing route has no `verdict` at all, so it falls through to `allow()` on its own.
 
-**Check every value box before saving.** The grey Stripe-looking text in an empty box is a
-placeholder, not a value. A rule whose box is empty compares nothing and passes everything,
-and the pipeline summary will still say the filter has rules.
+**Check every value box before saving.** An empty box shows a grey Stripe-shaped example that
+looks filled in. Worse, some of the template's boxes hold real Stripe-shaped text, which
+looks equally plausible and actually does something wrong. Neither is caught by reading the
+pipeline summary: it will happily report `2 rules` for two rules that compare nothing.
 
 ## 4. Simulate
 
