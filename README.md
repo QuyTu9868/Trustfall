@@ -153,5 +153,21 @@ evidence rather than instruction. It holds against a plain attempt to order a ve
 
 ## Status
 
-Deployed to Sepolia and verified. Latch integration is wired but not yet configured against
-the live gateway.
+Deployed to Sepolia and verified. Both agents run behind a Latch policy: six filters, of
+which five check the shape of a request and one checks whether the request is something the
+agent was ever given the authority to ask for.
+
+That last one is the only rule here worth arguing about. The server refuses to sign below
+0.6 confidence and applies that bar to all three verdicts, which is the wrong shape, because
+being wrong does not cost the same each time. Refunding the renter and splitting the deposit
+both leave them holding something. Awarding the whole deposit to the owner is the one ruling
+where being wrong costs somebody everything they put up, so the latch asks 0.9 for that
+verdict alone.
+
+It is not forbidden outright, which would read stronger and be worse. There is no human
+resolver, so a renter who genuinely wrecked the item would leave the agent blocked and the
+seven day timeout would hand them their deposit back. A gate that cannot be passed is not a
+policy, it is a deleted feature.
+
+The policy is in [`services/latch/`](services/latch/), because a policy that exists only as
+boxes ticked on somebody else's dashboard is a policy nobody can review.
