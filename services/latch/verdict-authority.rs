@@ -24,27 +24,33 @@
 // Absent on the listing route, which has no verdict at all, so that route falls straight
 // through to allow() without needing a when clause to exclude it.
 //
-// The quotes get trimmed because it is not documented whether body_field hands back the
-// JSON value or the string inside it, and the difference is invisible: compare against the
-// wrong one and the guard silently allows everything, which is exactly what a broken gate
-// looks like from outside. Trimming costs nothing and removes the question.
-let raw_verdict = ctx.body_field("verdict").unwrap_or_default();
-let verdict = raw_verdict.trim().trim_matches('"');
-if verdict != "pay_owner" {
+// Both spellings, rather than trimming the quotes off. It is not documented whether
+// body_field hands back the JSON value or the string inside it, and the difference is
+// invisible from outside: compare against the wrong one and the guard allows everything
+// while still looking like a guard.
+//
+// Trimming was the obvious fix and it would not compile, which is the useful part of the
+// answer: whatever this returns has no trim method. So the comparison stays exactly the
+// operation the first version used, the one the editor accepted, and only the number of
+// things compared against goes up.
+let verdict = ctx.body_field("verdict").unwrap_or_default();
+if verdict != "pay_owner" && verdict != "\"pay_owner\"" {
     return PolicyResult::allow();
 }
 
 // Missing or unreadable counts as not confident. An arbitrator that cannot say how sure it
 // is has not cleared a bar, and reading a missing number as a passing one is how a bar stops
 // being a bar. -1.0 is below every threshold, so both failures land on deny.
-let raw_confidence = ctx.body_field("confidence").unwrap_or_default();
-let confidence: f64 = raw_confidence.trim().trim_matches('"').parse().unwrap_or(-1.0);
+// Back to exactly what the first version did, for the same reason: parse() was in the code
+// the editor compiled, trim() was not. A number arriving quoted would fail to parse and
+// land on -1.0, which denies, so the safe direction is the one that survives the doubt.
+let confidence: f64 = ctx.body_field("confidence").unwrap_or_default().parse().unwrap_or(-1.0);
 
+// One line, no continuation. A backslash-wrapped string is correct Rust and it is also the
+// kind of thing that arrives mangled after a trip through a chat window and an editor, and
+// this file exists to be copied.
 if confidence < 0.9 {
-    return PolicyResult::deny(
-        "Taking the whole deposit needs 0.9 confidence. Trustfall lets the agent split a \
-         deposit on its own judgement, not empty one.",
-    );
+    return PolicyResult::deny("Taking the whole deposit needs 0.9 confidence. Trustfall lets the agent split a deposit on its own judgement, not empty one.");
 }
 
 PolicyResult::allow()
