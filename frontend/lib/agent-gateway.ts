@@ -94,9 +94,29 @@ export async function propose<T>(path: string, body: unknown): Promise<T> {
  * bounds the damage: the routes re-read the chain, re-check the confidence bar, and the
  * contract accepts one of three words and derives every amount itself.
  */
+export const GATEWAY_HEADER = "x-agent-gateway-secret";
+
 export function cameThroughGateway(request: Request) {
   const expected = process.env.AGENT_GATEWAY_SECRET;
   if (!expected) return { ok: true, guarded: false };
-  const sent = request.headers.get("x-agent-gateway-secret");
-  return { ok: sent === expected, guarded: true };
+
+  const sent = request.headers.get(GATEWAY_HEADER);
+  if (sent === expected) return { ok: true, guarded: true };
+
+  // Named, because the one thing that cannot be checked afterwards is the name.
+  //
+  // Latch encrypts a credential on save and never shows it again, including which header it
+  // attaches it to. Pick the wrong one in its INJECT AS box and every request answers 401,
+  // which reads as a broken gateway or a mistyped secret rather than a credential arriving
+  // safely under a name nobody is reading.
+  //
+  // So the first refusal says what did arrive. Names only: a value here would put the
+  // credential in a log, and the whole point of the header is that it stays out of them.
+  console.error(
+    `[gateway] 401 on ${new URL(request.url).pathname}. Expected the secret in "${GATEWAY_HEADER}"` +
+      `${sent === null ? ", which was absent" : ", which was present but did not match"}.` +
+      ` Headers received: ${[...request.headers.keys()].sort().join(", ")}`
+  );
+
+  return { ok: false, guarded: true };
 }

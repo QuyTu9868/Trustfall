@@ -166,6 +166,20 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
 - **Skill đích:** `vibe-code-dapp` (bước dựng repo), `deploy-verify-contract` (phần
   an toàn private key)
 
+### [2026-08-08] Bảo user chạy Simulate ở trang khác trong khi latch chưa được lưu
+- **Chuyện gì xảy ra:** Dựng xong 6 filter Latch, mình bảo user sang mục Simulate ở menu
+  bên trái để kiểm trước rồi hãy Activate. Latch chỉ lưu khi bấm `Activate latch`, nên
+  rời trang là mất trắng. User phải dựng lại từ đầu, gồm cả 11 rule gõ tay.
+- **Sai ở đâu:** Chữ `unsaved` nằm ngay cạnh nút, mình nhìn nhiều lần mà không đọc. Mình
+  suy ra thứ tự "kiểm trước, cam kết sau" từ thói quen chung, thay vì từ cái giao diện
+  đang mở, nơi việc kiểm và việc lưu nằm ở hai trang khác nhau.
+- **Luật rút ra:** Trong dashboard của người khác, **hỏi "công sức này đang nằm ở đâu"
+  trước khi bảo user đi đâu đó**. Chưa thấy bằng chứng đã lưu (chữ unsaved biến mất, có
+  id, có URL riêng) thì mọi thao tác điều hướng đều là rủi ro mất dữ liệu. Thứ tự đúng
+  là lưu trước rồi mới kiểm, vì thứ đã lưu thì sửa lại được, còn thứ chưa lưu thì không.
+- **Skill đích:** `latch-agent-gateway` (đã thêm mục "latch chưa được lưu cho tới khi
+  bấm Activate")
+
 ---
 
 ## 3. Thiếu sót khi code
@@ -889,6 +903,21 @@ Ba loại user đã nêu cho mục này:
   pending, không refetch sau khi giao dịch được mine
 
 Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật, test tự động dễ bỏ sót.
+
+### [2026-08-08] Để một cấu hình không đọc lại được thành thứ phải đoán khi lỗi
+- **Chuyện gì xảy ra:** Secret của Latch được mã hoá lúc lưu, và **cả tên header lẫn giá
+  trị đều không xem lại được**. User không nhớ chắc đã đặt tên header là
+  `x-agent-gateway-secret` hay `agent-gateway-token`. Nếu sai thì mọi request trả 401, mà
+  401 nhìn hệt như secret gõ sai, như Latch hỏng, như biến môi trường chưa lên Vercel.
+- **Sai ở đâu:** Mình viết `cameThroughGateway` chỉ trả về `ok: false`. Đúng về bảo mật,
+  vô dụng về chẩn đoán: nó vứt đi thứ duy nhất còn biết được, là **tên các header thật sự
+  đã tới nơi**. Bên ngoài không đọc lại được thì bên trong phải ghi lại.
+- **Luật rút ra:** Cấu hình nào chỉ ghi được một lần rồi không đọc lại được thì
+  **phải có một đường tự khai ở phía mình**. Cụ thể: chỗ từ chối phải log ra cái nó đã
+  nhận (tên, không bao giờ giá trị) chứ không chỉ log ra việc đã từ chối. Nguyên tắc
+  chung: một lớp bảo vệ nên nói được vì sao nó từ chối, nếu không thì mỗi lần cấu hình
+  sai lại thành một buổi mò.
+- **Skill đích:** `latch-agent-gateway` (mục INJECT AS), `agentic-engineering`
 
 ---
 
