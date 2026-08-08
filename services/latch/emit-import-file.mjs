@@ -10,9 +10,19 @@
  * JSON, single object, non-empty `name`, then reads `upstream.baseUrl`, `pipeline`, and
  * optionally `enabled`, `expiresAt`, `logRequestBody`, `logResponseBody`.
  *
- * Two things import cannot carry, both fixed afterwards in the latch editor:
- *   the secret, which is `secretId` only, so there is no way to create one inline
- *   the timeout, which is not in the mapping at all
+ * One catch, and it is fatal if you meet it the way we did. Import carries `secretId` only,
+ * never a secret, and the editor labels the field **"fixed after creation"**. A latch
+ * imported without a secret id can never be given one: it forwards with nothing attached,
+ * every request answers 401, and the only fix is to delete it and start again. timeoutMs is
+ * not in the mapping either, and is fixed the same way.
+ *
+ * So set LATCH_SECRET_ID from a secret made first on the Secrets page. Without it this
+ * writes a file that imports cleanly and produces a latch that cannot work, which is worse
+ * than one that fails loudly.
+ *
+ * When there is no secret to point at, use create-latch.mjs or the console snippet instead:
+ * POST /admin/latches takes `secret: {kind:"new", newSecret:{...}}` and builds both at once,
+ * which is the only path that does everything in a single step.
  *
  * The pipeline is captured from create-latch.mjs rather than restated, so there is one
  * definition of the policy and it cannot drift between the two files.
@@ -46,12 +56,19 @@ if (!captured) {
   process.exit(1);
 }
 
+const secretId = process.env.LATCH_SECRET_ID ?? null;
+if (!secretId) {
+  console.warn(
+    "No LATCH_SECRET_ID, so this file will import a latch with no credential.\n" +
+      "The secret is fixed at creation, so that latch can never be repaired and every\n" +
+      "request through it will 401. Point it at a secret from the Secrets page, or use\n" +
+      "the console snippet, which creates the secret and the latch together.\n"
+  );
+}
+
 const importFile = {
   name: captured.name,
-  // Left null on purpose. Attach the secret in the editor after importing, and set INJECT AS
-  // to "API key header" with the header name x-agent-gateway-secret, or the signing routes
-  // answer 401 to everything.
-  secretId: null,
+  secretId,
   upstream: { baseUrl: captured.upstreamBaseUrl },
   pipeline: captured.pipeline,
   enabled: true,
