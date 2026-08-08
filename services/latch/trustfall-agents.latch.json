@@ -1,0 +1,131 @@
+{
+  "name": "trustfall-agents",
+  "secretId": null,
+  "upstream": {
+    "baseUrl": "https://trustfall-latch.vercel.app"
+  },
+  "pipeline": [
+    {
+      "type": "method",
+      "name": "POST only",
+      "allowed": [
+        "POST"
+      ]
+    },
+    {
+      "type": "rate_limit",
+      "name": "Sixty an hour",
+      "maxRequests": 60,
+      "windowSeconds": 3600,
+      "keyBy": "latch"
+    },
+    {
+      "type": "endpoint",
+      "name": "Agent routes only",
+      "mode": "allowlist",
+      "patterns": [
+        "/api/agent/**"
+      ]
+    },
+    {
+      "type": "payload",
+      "name": "Dispute proposals",
+      "when": {
+        "pathPrefix": "/api/agent/resolve-dispute"
+      },
+      "rules": [
+        {
+          "path": "$.rentalId",
+          "operator": "exists"
+        },
+        {
+          "path": "$.verdict",
+          "operator": "in",
+          "value": [
+            "refund_renter",
+            "split",
+            "pay_owner"
+          ],
+          "reason": "Not a verdict this contract knows."
+        },
+        {
+          "path": "$.confidence",
+          "operator": "type_is",
+          "value": "number"
+        },
+        {
+          "path": "$.confidence",
+          "operator": "greater_than_or_equal",
+          "value": 0
+        },
+        {
+          "path": "$.confidence",
+          "operator": "less_than_or_equal",
+          "value": 1
+        },
+        {
+          "path": "$.reason",
+          "operator": "max_length",
+          "value": 500
+        },
+        {
+          "path": "$.amount",
+          "operator": "not_exists",
+          "reason": "An arbitrator does not name amounts."
+        },
+        {
+          "path": "$.to",
+          "operator": "not_exists",
+          "reason": "An arbitrator does not name addresses."
+        },
+        {
+          "path": "$.recipient",
+          "operator": "not_exists",
+          "reason": "An arbitrator does not name addresses."
+        },
+        {
+          "path": "$.address",
+          "operator": "not_exists",
+          "reason": "An arbitrator does not name addresses."
+        },
+        {
+          "path": "$.privateKey",
+          "operator": "not_exists",
+          "reason": "Nothing here should ever carry a key."
+        }
+      ]
+    },
+    {
+      "type": "payload",
+      "name": "Listing verdicts",
+      "when": {
+        "pathPrefix": "/api/agent/publish-listing"
+      },
+      "rules": [
+        {
+          "path": "$.listingId",
+          "operator": "exists"
+        },
+        {
+          "path": "$.decision",
+          "operator": "in",
+          "value": [
+            "approve",
+            "reject"
+          ],
+          "reason": "A listing check answers approve or reject."
+        }
+      ]
+    },
+    {
+      "type": "custom_code",
+      "name": "Verdict authority",
+      "language": "rust",
+      "code": "// Paste into the custom_code filter on the Latch dashboard. The language is Rust, not\n// JavaScript: Latch compiles this to WASM and runs it inside the enclave, and the editor\n// says \"compiled - runs verified\" once it builds.\n//\n// The body runs inside:\n//     pub fn on_request(ctx: &RequestContext) -> PolicyResult { ... }\n//\n// The one rule here that the declarative filters cannot express.\n//\n// The server already refuses to sign below 0.6 confidence, and it applies that bar to all\n// three verdicts. That is the wrong shape, because the three outcomes do not cost the same\n// when they are wrong. refund_renter and split both leave the renter holding something.\n// pay_owner takes the entire deposit off them, and it is the only ruling where being wrong\n// costs somebody everything they put up.\n//\n// So the bar scales with the damage. The agent may be fairly sure and still move money, but\n// to take all of it, it has to be almost certain. That is the authority Trustfall delegated\n// to it, written in the one place the agent cannot edit.\n//\n// Note what this does not do: it never lowers a bar, never names an amount, and never picks\n// a winner. A verdict that gets past here still has to survive the server reading the rental\n// back off the chain, and the contract still works out every figure itself.\n\n// Absent on the listing route, which has no verdict at all, so that route falls straight\n// through to allow() without needing a when clause to exclude it.\nlet verdict = ctx.body_field(\"verdict\").unwrap_or_default();\nif verdict != \"pay_owner\" {\n    return PolicyResult::allow();\n}\n\n// Missing or unreadable counts as not confident. An arbitrator that cannot say how sure it\n// is has not cleared a bar, and reading a missing number as a passing one is how a bar stops\n// being a bar. -1.0 is below every threshold, so both failures land on deny.\nlet confidence: f64 = ctx\n    .body_field(\"confidence\")\n    .unwrap_or_default()\n    .parse()\n    .unwrap_or(-1.0);\n\nif confidence < 0.9 {\n    return PolicyResult::deny(\n        \"Taking the whole deposit needs 0.9 confidence. Trustfall lets the agent split a \\\n         deposit on its own judgement, not empty one.\",\n    );\n}\n\nPolicyResult::allow()\n"
+    }
+  ],
+  "enabled": true,
+  "expiresAt": null,
+  "logRequestBody": true,
+  "logResponseBody": true
+}
