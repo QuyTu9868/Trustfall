@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
 import { endAdminSession, hasAdminSession, startAdminSession } from "@/lib/admin-session";
+import { readSettlement } from "@/lib/settlement";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "@/lib/supabase-server";
 import { verifyCode } from "@/lib/totp";
 
@@ -117,8 +118,13 @@ async function one(rentalId: number) {
     }
   }
 
+  // Only for a ruling that was acted on. A held-back one has no transaction, so there is
+  // nothing to read and nothing to show, which is itself the honest answer.
+  const settled = verdict.signed && verdict.tx_hash ? await readSettlement(verdict.tx_hash) : null;
+
   return NextResponse.json({
     verdict,
+    settled,
     evidence: (evidence ?? []).map((entry) => ({
       side: entry.side,
       statement: entry.statement,

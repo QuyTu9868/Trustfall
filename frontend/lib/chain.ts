@@ -39,3 +39,20 @@ export function rpcUrl(): string | undefined {
     undefined
   );
 }
+
+/**
+ * Where to go and read a transaction for yourself.
+ *
+ * The log says which of three ways a deposit was split, and saying so is not the same as
+ * showing it. A verdict is a claim about money; the explorer holds the token transfers that
+ * either happened or did not, under the agent's address, on a chain this project does not
+ * control. That is the difference between a record and a receipt.
+ *
+ * Undefined on the local chain, which has no explorer, so callers render the hash as plain
+ * text there rather than a link to nowhere. viem carries the explorer for each chain it
+ * knows, so this reads it from there instead of hardcoding a hostname that would go stale.
+ */
+export function explorerTxUrl(hash: string): string | undefined {
+  const base = targetChain.blockExplorers?.default.url;
+  return base ? `${base}/tx/${hash}` : undefined;
+}

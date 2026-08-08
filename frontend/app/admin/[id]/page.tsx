@@ -1,9 +1,62 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { OUTCOME, type ChatLine, type Filed, type Verdict } from "@/lib/admin-view";
+import { explorerTxUrl } from "@/lib/chain";
+import {
+  DEPOSIT_ONLY,
+  OUTCOME,
+  type ChatLine,
+  type Filed,
+  type Settled,
+  type Verdict,
+} from "@/lib/admin-view";
 
-type Detail = { verdict: Verdict; evidence: Filed[]; chat: ChatLine[] };
+type Detail = { verdict: Verdict; evidence: Filed[]; chat: ChatLine[]; settled: Settled };
+
+/**
+ * Where the deposit went, and the receipt for it.
+ *
+ * The line above this one says which of three ways the arbitrator chose. This says what the
+ * contract then did, in figures it emitted itself, with a link to the transaction so nobody
+ * has to believe either of us. That gap between the claim and the receipt is the only reason
+ * this block exists.
+ */
+function Settlement({ settled, txHash }: { settled: Settled; txHash: string | null }) {
+  const url = txHash ? explorerTxUrl(txHash) : undefined;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-card border border-line bg-surface p-3">
+      {settled ? (
+        <>
+          <dl className="tabular flex flex-wrap gap-x-8 gap-y-1 text-sm">
+            <Row label="To the renter" value={`${settled.toRenter} USDC`} tabular />
+            <Row label="To the owner" value={`${settled.toOwner} USDC`} tabular />
+            <Row label="Deposit held" value={`${settled.total} USDC`} tabular />
+          </dl>
+          <p className="text-xs text-ink-muted">{DEPOSIT_ONLY}</p>
+        </>
+      ) : (
+        // The hash is still worth showing on its own. It is the thing somebody checks with.
+        <p className="text-xs text-ink-muted">
+          The amounts could not be read back from the chain just now.
+        </p>
+      )}
+
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="tabular text-[11px] break-all text-live-ink underline underline-offset-2"
+        >
+          {txHash}
+        </a>
+      ) : (
+        <p className="tabular text-[11px] break-all text-live-ink">{txHash}</p>
+      )}
+    </div>
+  );
+}
 
 /**
  * One dispute, in the order somebody auditing it would want to read it.
@@ -61,7 +114,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
     );
   }
 
-  const { verdict, evidence, chat } = detail;
+  const { verdict, evidence, chat, settled } = detail;
 
   return (
     <main className="flex max-w-4xl flex-col gap-8">
@@ -90,9 +143,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
         {/* The two facts that matter most to somebody auditing this: whether money actually
             moved, and if not, why the server declined to move it. */}
         {verdict.signed ? (
-          <p className="tabular rounded-card border border-line bg-surface p-3 text-[11px] break-all text-live-ink">
-            {verdict.tx_hash}
-          </p>
+          <Settlement settled={settled} txHash={verdict.tx_hash} />
         ) : (
           <p className="rounded-card border border-line bg-surface p-3 text-sm text-pend-ink">
             Nothing was signed. {verdict.held_back_reason} Nobody can sign it instead: the

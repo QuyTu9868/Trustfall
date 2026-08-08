@@ -64,3 +64,24 @@ export const OUTCOME: Record<Verdict["verdict"], string> = {
   split: "deposit split",
   pay_owner: "deposit to the owner",
 };
+
+/**
+ * The two figures the contract emitted while moving the deposit, or null when there is
+ * nothing to read: a ruling that was held back, or a node that would not answer.
+ *
+ * Kept beside the verdict rather than folded into it, because one is a decision somebody
+ * made and the other is what a chain recorded, and a reader is entitled to see which is
+ * which.
+ */
+export type Settled = { toRenter: string; toOwner: string; total: string } | null;
+
+/**
+ * When the rent was settled, which is not when the deposit was.
+ *
+ * Rent leaves escrow the moment a rental stops being Active, so a dispute opened during the
+ * rental settles it there and one opened after the item came back settled it at check-out.
+ * Either way it is already gone by the time the arbitrator rules, and the figures below are
+ * the deposit alone. Without this line the two numbers read as the whole of the money.
+ */
+export const DEPOSIT_ONLY =
+  "The deposit only. Rent left escrow earlier, when the rental stopped being active.";

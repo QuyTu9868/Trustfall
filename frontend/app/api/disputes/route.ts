@@ -3,6 +3,7 @@ import { errorResponse } from "@/lib/api";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { RentalError, readRentalAsParty } from "@/lib/rental-server";
 import { resolveDispute } from "@/lib/resolve-dispute";
+import { readSettlement } from "@/lib/settlement";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "@/lib/supabase-server";
 
 const MAX_STATEMENT = 1500;
@@ -66,6 +67,9 @@ export async function GET(request: Request) {
         image_url: image_path ? (links.get(image_path) ?? null) : null,
       })),
       verdict: verdict ?? null,
+      // The figures the contract emitted, for the two people whose money it was. They are
+      // the ones with the strongest claim to see the receipt rather than the summary.
+      settled: verdict?.signed && verdict.tx_hash ? await readSettlement(verdict.tx_hash) : null,
     });
   } catch (error) {
     if (error instanceof AuthError) return errorResponse(error, 401);

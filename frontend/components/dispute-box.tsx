@@ -2,6 +2,8 @@
 
 import { useIdentityToken } from "@privy-io/react-auth";
 import { useEffect, useMemo, useState } from "react";
+import { DEPOSIT_ONLY, type Settled } from "@/lib/admin-view";
+import { explorerTxUrl } from "@/lib/chain";
 
 type Filed = {
   side: "owner" | "renter";
@@ -43,6 +45,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
   const [mine, setMine] = useState<"owner" | "renter" | null>(null);
   const [filed, setFiled] = useState<Filed[] | null>(null);
   const [ruling, setRuling] = useState<Ruling | null>(null);
+  const [settled, setSettled] = useState<Settled>(null);
 
   const [appeal, setAppeal] = useState("");
   const [appealNote, setAppealNote] = useState<string | null>(null);
@@ -72,6 +75,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
         setMine(result.mine);
         setFiled(result.evidence as Filed[]);
         setRuling(result.verdict as Ruling | null);
+        setSettled((result.settled ?? null) as Settled);
       } catch {
         // A missed poll leaves the last answer on screen, which is better than blanking it.
       }
@@ -283,9 +287,31 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
           {/* Whether it was acted on is a different fact from what it decided, and the
               difference is the whole point of having a threshold. */}
           {ruling.signed ? (
-            <span className="tabular text-[11px] text-live-ink break-all">
-              Applied on chain: {ruling.tx_hash}
-            </span>
+            <div className="flex flex-col gap-1">
+              {/* The figures, not only the word. "Deposit split" is a summary; these two
+                  numbers are what each of them will see arrive, and the link is how they
+                  check it without asking us. */}
+              {settled ? (
+                <span className="tabular text-xs text-ink-muted">
+                  Renter {settled.toRenter} USDC · owner {settled.toOwner} USDC · of{" "}
+                  {settled.total} held. {DEPOSIT_ONLY}
+                </span>
+              ) : null}
+              {explorerTxUrl(ruling.tx_hash ?? "") ? (
+                <a
+                  href={explorerTxUrl(ruling.tx_hash ?? "")}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="tabular text-[11px] text-live-ink underline underline-offset-2 break-all"
+                >
+                  Applied on chain: {ruling.tx_hash}
+                </a>
+              ) : (
+                <span className="tabular text-[11px] text-live-ink break-all">
+                  Applied on chain: {ruling.tx_hash}
+                </span>
+              )}
+            </div>
           ) : (
             <span className="text-xs text-pend-ink">
               Not applied. {ruling.held_back_reason} There is no one to overrule it: the
