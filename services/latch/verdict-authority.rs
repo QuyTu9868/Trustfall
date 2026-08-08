@@ -23,7 +23,13 @@
 
 // Absent on the listing route, which has no verdict at all, so that route falls straight
 // through to allow() without needing a when clause to exclude it.
-let verdict = ctx.body_field("verdict").unwrap_or_default();
+//
+// The quotes get trimmed because it is not documented whether body_field hands back the
+// JSON value or the string inside it, and the difference is invisible: compare against the
+// wrong one and the guard silently allows everything, which is exactly what a broken gate
+// looks like from outside. Trimming costs nothing and removes the question.
+let raw_verdict = ctx.body_field("verdict").unwrap_or_default();
+let verdict = raw_verdict.trim().trim_matches('"');
 if verdict != "pay_owner" {
     return PolicyResult::allow();
 }
@@ -31,11 +37,8 @@ if verdict != "pay_owner" {
 // Missing or unreadable counts as not confident. An arbitrator that cannot say how sure it
 // is has not cleared a bar, and reading a missing number as a passing one is how a bar stops
 // being a bar. -1.0 is below every threshold, so both failures land on deny.
-let confidence: f64 = ctx
-    .body_field("confidence")
-    .unwrap_or_default()
-    .parse()
-    .unwrap_or(-1.0);
+let raw_confidence = ctx.body_field("confidence").unwrap_or_default();
+let confidence: f64 = raw_confidence.trim().trim_matches('"').parse().unwrap_or(-1.0);
 
 if confidence < 0.9 {
     return PolicyResult::deny(
