@@ -1,6 +1,7 @@
 /**
- * Builds three finished rentals that are already in dispute, and lets the arbitrator judge
- * each one. Local chain only.
+ * Builds three real rentals on Sepolia, argues over each one, and lets the arbitrator rule.
+ * Everything goes through production: the deployed contracts, the live Latch policy, and
+ * the signing route on Vercel.
  *
  * Made for looking at rather than for asserting. The suites in cp9 and cp10 prove the
  * agents decide correctly against fixed inputs; this one produces the thing a person opens
@@ -12,10 +13,11 @@
  * Uses the wallets in .env.test so the rentals also show up in the app under the accounts
  * the user signs in with. Their keys are read, never printed.
  */
+import { readFile } from "node:fs/promises";
 import { Jimp } from "jimp";
 import { createPublicClient, createWalletClient, http, parseUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { hardhat } from "viem/chains";
+import { sepolia } from "viem/chains";
 import {
   escrowAbi,
   escrowAddress,
@@ -34,8 +36,23 @@ import {
   getSupabaseAdmin,
 } from "../lib/supabase-server";
 
-const RPC = "http://127.0.0.1:8545";
-const pub = createPublicClient({ chain: hardhat, transport: http(RPC) });
+const RPC = process.env.SEPOLIA_RPC_URL;
+const pub = createPublicClient({ chain: sepolia, transport: http(RPC) });
+
+/**
+ * Runs against Sepolia, which changes two things about how this script can be written.
+ *
+ * The clock cannot be moved. evm_increaseTime was how the local version got a rental to be
+ * over before checking out, and there is no such lever on a real network. It turns out not
+ * to be needed: a dispute can be opened from Active as well as from Returned, so the two
+ * arguments worth showing are reachable by choosing when to stop rather than by skipping
+ * ahead. That is also closer to what actually happens, since most people who are going to
+ * argue start before the rental is over.
+ *
+ * And every transaction is real. Roughly a dozen per case, each waiting on a block, so this
+ * takes minutes rather than seconds and the wallets need funding first.
+ */
+const PROXY = "https://onlatch.com/proxy";
 
 type Case = {
   title: string;
@@ -51,6 +68,23 @@ type Case = {
   photos?: { owner: "damaged" | "clean"; renter: "damaged" | "clean" };
   /** What the pair taken at the two handovers shows. This is the evidence that decides. */
   handover?: { checkin: "damaged" | "clean"; checkout: "damaged" | "clean" };
+  /**
+   * The photograph the listing advertises, taken from public/landing.
+   *
+   * Real ones here, unlike the evidence below. What was advertised is the oldest thing the
+   * arbitrator is handed and it is supposed to look like an advertisement, so a drawn panel
+   * would be the one part of the record that announces itself as invented.
+   */
+  photo: "vehicles" | "homes" | "clothing";
+  /**
+   * Where the argument starts.
+   *
+   * "active" opens the dispute straight after check-in, while the renter still has the
+   * thing. "returned" runs the full handover both ways first and argues afterwards. The
+   * contract allows both, the app offers both, and they read differently in the log: one
+   * has a check-out photograph to weigh and the other does not.
+   */
+  flow: "active" | "returned";
 };
 
 /**
@@ -113,26 +147,30 @@ const CASES: Case[] = [
     photos: { owner: "clean", renter: "clean" },
     // Unmarked at both handovers, so the scratch the owner describes was never there.
     handover: { checkin: "clean", checkout: "clean" },
+    photo: "vehicles",
+    flow: "returned",
   },
   {
-    title: "Canon EOS R6 with 24-70mm",
+    title: "Wool overcoat, size M",
     category: "clothing",
-    description: "Body and lens, one battery, SD card included.",
+    description: "Charcoal, mid length, dry cleaned before every hire.",
     pricePerDay: "30",
     deposit: "40",
     ownerSays:
-      "The lens mount is bent and the autofocus does not work. It was working when I handed it over, I tested it in front of him.",
+      "There is a tear along the seam under the left arm. It was not there when I handed it over, I check every coat before it goes out.",
     renterSays:
-      "I did drop it on the second day. I am sorry. It still took photos afterwards so I do not think it is as bad as he says.",
+      "It caught on a chair at the reception and the seam opened. I am sorry. It is one seam and a tailor can close it.",
     chat: [
-      { from: "renter", body: "Bad news, I dropped the camera today. It still works but the lens feels loose." },
-      { from: "owner", body: "How did that happen? That lens is worth more than the body." },
-      { from: "renter", body: "It slipped off the table. I will pay for what it costs." },
+      { from: "renter", body: "Bad news, the coat caught on something tonight and the seam under the arm has opened." },
+      { from: "owner", body: "How big? That coat is lined, a seam there is not a five minute job." },
+      { from: "renter", body: "About ten centimetres. I will pay for the repair." },
     ],
     expect: "the owner keeps the deposit",
     photos: { owner: "damaged", renter: "damaged" },
     // Clean going out and marked coming back, which is the pair doing its whole job.
     handover: { checkin: "clean", checkout: "damaged" },
+    photo: "clothing",
+    flow: "returned",
   },
   {
     title: "Studio apartment near Ben Thanh",
@@ -140,23 +178,23 @@ const CASES: Case[] = [
     description: "35 square metres, air conditioning, washing machine, wifi.",
     pricePerDay: "25",
     deposit: "30",
-    ownerSays: "The apartment was left filthy. Rubbish everywhere and a burn mark on the counter.",
-    renterSays: "I cleaned it before leaving and there was no burn mark. This is not true.",
-    chat: [],
-    expect: "below the confidence bar, left for a human",
+    ownerSays:
+      "He is complaining about the air conditioning to get money back. It was serviced in June and it works.",
+    renterSays:
+      "The air conditioning has not worked since I arrived. It is 34 degrees. I have messaged twice and had no answer.",
+    chat: [
+      { from: "renter", body: "Hi, the aircon in the bedroom is blowing warm air. Can someone look at it?" },
+      { from: "renter", body: "Still nothing today, it is really hot. Please can you send someone." },
+    ],
+    expect: "argued while still renting, with no check-out photograph to weigh",
+    // Argued mid-rental, so there is a check-in photograph and nothing from a check-out
+    // that has not happened. The gap is the point: the arbitrator has to say so rather
+    // than invent the missing half.
+    handover: { checkin: "clean", checkout: "clean" },
+    photo: "homes",
+    flow: "active",
   },
 ];
-
-async function rpc(method: string, params: unknown[]) {
-  const response = await fetch(RPC, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  });
-  const result = await response.json();
-  if (result.error) throw new Error(`${method}: ${result.error.message}`);
-  return result.result;
-}
 
 async function wait(hash: `0x${string}`, label: string) {
   const receipt = await pub.waitForTransactionReceipt({ hash });
@@ -166,7 +204,9 @@ async function wait(hash: `0x${string}`, label: string) {
 
 async function main() {
   if (!escrowAddress || !usdcAddress) {
-    throw new Error("Nothing deployed. Run npm run setup:local in contracts first.");
+    throw new Error(
+      `No addresses for chain ${sepolia.id} in lib/deployed.json. Check NEXT_PUBLIC_CHAIN_ID.`
+    );
   }
   // Copied into locals because the check above does not narrow an imported binding inside
   // the closures below, and every call there would otherwise take an address of undefined.
@@ -179,10 +219,22 @@ async function main() {
     throw new Error("Test_1 and Test_2 must be set. They live in .env.test at the repo root.");
   }
 
+  // Out through the real gateway, not back at this machine.
+  //
+  // .env.local points LATCH_PROXY_URL at localhost, which is right for developing and wrong
+  // for this: the whole value of seeding against production is that every proposal takes the
+  // path a proposal takes in production, through the policy, with the credential attached by
+  // Latch rather than by anything here. Overriding it in the script rather than editing the
+  // file keeps the development default intact.
+  if (!process.env.LATCH_API_KEY) {
+    throw new Error("LATCH_API_KEY must be set, or the proposals never reach the gateway.");
+  }
+  process.env.LATCH_PROXY_URL = PROXY;
+
   const owner = privateKeyToAccount(ownerKey as `0x${string}`);
   const renter = privateKeyToAccount(renterKey as `0x${string}`);
-  const ownerWallet = createWalletClient({ account: owner, chain: hardhat, transport: http(RPC) });
-  const renterWallet = createWalletClient({ account: renter, chain: hardhat, transport: http(RPC) });
+  const ownerWallet = createWalletClient({ account: owner, chain: sepolia, transport: http(RPC) });
+  const renterWallet = createWalletClient({ account: renter, chain: sepolia, transport: http(RPC) });
   const supabase = getSupabaseAdmin();
 
   console.log(`owner  ${owner.address}\nrenter ${renter.address}\n`);
@@ -208,13 +260,15 @@ async function main() {
       .single();
     if (error || !listing) throw new Error(`listing insert failed: ${error?.message}`);
 
-    // Two photographs on the listing, in the public bucket the app uses, so the arbitrator
-    // sees what was advertised before any of this happened.
-    for (const [index, kind] of (["clean", "clean"] as const).entries()) {
+    // What the listing advertised, in the public bucket the app uses, so the arbitrator sees
+    // it before anything that was filed afterwards. The same file twice: two angles would be
+    // better and two photographs of the same thing is what a listing actually has.
+    const advert = await readFile(new URL(`../public/landing/${item.photo}.jpg`, import.meta.url));
+    for (const index of [0, 1]) {
       const path = `${listing.id}/${index}.jpg`;
       const { error: imageError } = await supabase.storage
         .from(LISTING_IMAGE_BUCKET)
-        .upload(path, await panel(kind), { contentType: "image/jpeg", upsert: true });
+        .upload(path, advert, { contentType: "image/jpeg", upsert: true });
       if (imageError) throw new Error(`listing image failed: ${imageError.message}`);
       const { data: url } = supabase.storage.from(LISTING_IMAGE_BUCKET).getPublicUrl(path);
       const { error: rowError } = await supabase
@@ -229,9 +283,9 @@ async function main() {
     const check = await moderateListing({
       title: item.title,
       description: item.description,
-      images: await Promise.all(
-        (["clean", "clean"] as const).map(async (kind) => `data:image/jpeg;base64,${(await panel(kind)).toString("base64")}`)
-      ),
+      // The same file the listing shows, not a stand-in. A checker judged on one image and
+      // a listing displaying another is a log that cannot be checked against the page.
+      images: [`data:image/jpeg;base64,${advert.toString("base64")}`],
       listingId: listing.id,
     });
     console.log(`  listing check: ${check.decision}${check.reasons.length ? " - " + check.reasons.join(" | ") : ""}`);
@@ -239,13 +293,12 @@ async function main() {
     const price = parseUnits(item.pricePerDay, 6);
     const deposit = parseUnits(item.deposit, 6);
 
-    // Mine an empty block before reading the clock. Hardhat only makes a block when a
-    // transaction arrives, so an idle node still reports the timestamp of whenever it last
-    // did something: measured here at 68 minutes stale. Signing a permit against that
-    // stale reading produces a deadline already in the past by the time the request is
-    // mined, the permit reverts inside the contract's try, and what surfaces is
-    // ERC20InsufficientAllowance, which sends you looking for a missing approval instead.
-    await rpc("evm_mine", []);
+    // Read from the chain rather than from this machine. Sepolia keeps its own clock and
+    // makes blocks on its own, so no nudge is needed here, but the permit deadline is
+    // signed against whatever this number says and a local clock that drifts would produce
+    // a deadline already expired on arrival. The permit then reverts inside the contract's
+    // try and surfaces as ERC20InsufficientAllowance, which sends you hunting for a missing
+    // approval that was never the problem.
     const chainNow = Number((await pub.getBlock()).timestamp);
     const total = price * 2n + deposit;
 
@@ -264,7 +317,7 @@ async function main() {
     })) as [string, string, string];
 
     const permit = await renterWallet.signTypedData({
-      domain: { name, version, chainId: hardhat.id, verifyingContract: usdc },
+      domain: { name, version, chainId: sepolia.id, verifyingContract: usdc },
       types: {
         Permit: [
           { name: "owner", type: "address" },
@@ -323,7 +376,7 @@ async function main() {
     );
 
     // Check-in: the owner signs the code, the renter is the one who sends it.
-    const domain = { name: "Trustfall", version: "1", chainId: hardhat.id, verifyingContract: escrow };
+    const domain = { name: "Trustfall", version: "1", chainId: sepolia.id, verifyingContract: escrow };
     const handover = async (kind: "checkIn" | "checkOut") => {
       const handoverNonce = (await pub.readContract({
         address: escrow,
@@ -362,15 +415,20 @@ async function main() {
     };
 
     await handover("checkIn");
-    await rpc("evm_increaseTime", [25 * 60 * 60]);
-    await rpc("evm_mine", []);
-    await handover("checkOut");
+    // Only the rentals that are meant to have been handed back. The other kind argues while
+    // the renter still holds the thing, which the contract allows from Active and which is
+    // the more common way an argument actually starts.
+    if (item.flow === "returned") await handover("checkOut");
 
     // The handover pair, written straight to the same place the route writes it. Taken
     // before either side knew there would be an argument, which is what makes it worth more
     // than anything filed afterwards.
     if (item.handover) {
-      for (const phase of ["checkin", "checkout"] as const) {
+      // A rental still in progress has no check-out photograph, because there has been no
+      // check-out. Writing one anyway would hand the arbitrator evidence from an event that
+      // never happened, and the log would show a finding citing it.
+      const phases = item.flow === "returned" ? (["checkin", "checkout"] as const) : (["checkin"] as const);
+      for (const phase of phases) {
         const path = `handover/${id}/${phase}.jpg`;
         const { error: upErr } = await supabase.storage
           .from(DISPUTE_EVIDENCE_BUCKET)
