@@ -36,3 +36,9 @@ playwright-report/
 files.zip
 .DS_Store
 *.log
+
+# Pages saved out of a vendor dashboard while working out their UI. Megabytes of somebody
+# else's bundle, and a saved page carries whatever was on screen at the time.
+Latch.html
+Latch_files/
+*_files/

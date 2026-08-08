@@ -195,12 +195,22 @@ are the ones this policy exists for.
 | 4 | `POST /api/listings` | deny | `endpoint` |
 | 5 | `verdict: "give_it_all_to_me"` | deny | `payload` / `in` |
 | 6 | Valid body **plus** `amount` and `to` | deny | `payload` / `not_exists` |
-| 7 | `pay_owner` at `0.72` confidence | deny | `custom_code` |
+| 7 | `pay_owner` at `0.72` confidence | deny, **live only** | `custom_code` |
 
 Case 6 has to be valid in every other respect. Break something else as well and a different
 filter catches it first, and you learn nothing about the one you were testing.
 
-Case 7 is the demo. Save the trace.
+**Case 7 cannot be run here at all.** Simulate reports the custom_code filter as
+*"TEE-enforced: actual decision is computed inside the REX enclave on the live upstream
+call; not evaluated locally"*. The Rust never executes on this page, so the one rule in this
+policy that is genuinely about authority rather than shape is the one rule Simulate cannot
+reach. It gets proved by an actual dispute going through the proxy, and the Activity log is
+where the proof lives.
+
+Worth sitting with, because it inverts the usual reassurance: a fully green Simulate says
+the requests are well formed and says nothing about whether the agent is allowed to do what
+it asked. The compiler badge in the editor catches the syntax; only a live call catches the
+logic.
 
 Paste these into the `Custom request` tab:
 
