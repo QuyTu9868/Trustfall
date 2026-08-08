@@ -42,3 +42,6 @@ files.zip
 Latch.html
 Latch_files/
 *_files/
+
+# Carries the gateway secret in plaintext so it can be pasted into a browser console.
+services/latch/console-snippet.txt

@@ -69,7 +69,7 @@ if (!secretId) {
 const importFile = {
   name: captured.name,
   secretId,
-  upstream: { baseUrl: captured.upstreamBaseUrl },
+  upstream: { baseUrl: captured.upstream.baseUrl },
   pipeline: captured.pipeline,
   enabled: true,
   expiresAt: null,

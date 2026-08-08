@@ -44,9 +44,16 @@ const FORBIDDEN = {
   privateKey: "Nothing here should ever carry a key.",
 };
 
+const UPSTREAM = "https://trustfall-latch.vercel.app";
+
 const body = {
   name: "trustfall-agents",
-  upstreamBaseUrl: "https://trustfall-latch.vercel.app",
+  // Both spellings, because the bundle contains both and only one of them is proven. The
+  // import handler, which is code that works, sends `upstream: {baseUrl}` to this same
+  // endpoint; the wizard's state object carries a flat `upstreamBaseUrl`. Sending one and
+  // guessing wrong answers 400 for a missing upstream, which is what happened.
+  upstream: { baseUrl: UPSTREAM },
+  upstreamBaseUrl: UPSTREAM,
   timeoutMs: 60000,
   // Both on. This is the only record that can show, from outside the app, what the agent
   // asked for and what the policy answered.
