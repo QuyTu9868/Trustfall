@@ -65,9 +65,9 @@ type Case = {
   chat: { from: "owner" | "renter"; body: string }[];
   expect: string;
   /** What each side's photograph shows, so the two disagree the way real ones do. */
-  photos?: { owner: "damaged" | "clean"; renter: "damaged" | "clean" };
+  photos?: { owner: Shot; renter: Shot };
   /** What the pair taken at the two handovers shows. This is the evidence that decides. */
-  handover?: { checkin: "damaged" | "clean"; checkout: "damaged" | "clean" };
+  handover?: { checkin: Shot; checkout: Shot };
   /**
    * The photograph the listing advertises, taken from public/landing.
    *
@@ -75,7 +75,7 @@ type Case = {
    * arbitrator is handed and it is supposed to look like an advertisement, so a drawn panel
    * would be the one part of the record that announces itself as invented.
    */
-  photo: "vehicles" | "homes" | "clothing";
+  photo: "vehicles" | "homes" | "clothing" | `file:${string}`;
   /**
    * Where the argument starts.
    *
@@ -85,6 +85,14 @@ type Case = {
    * has a check-out photograph to weigh and the other does not.
    */
   flow: "active" | "returned";
+  /**
+   * Reuse a listing that is already published instead of making another one.
+   *
+   * Matched by title. For arguing over something the user posted through the app
+   * themselves, where inventing a second copy of it would leave two of the same thing on
+   * the marketplace and only one of them attached to the dispute anybody reads about.
+   */
+  existingListing?: string;
 };
 
 /**
@@ -123,6 +131,22 @@ async function panel(kind: "damaged" | "clean") {
   }
 
   return Buffer.from(await image.getBuffer("image/jpeg", { quality: 80 }));
+}
+
+/**
+ * What a piece of evidence is, either drawn here or a real photograph on disk.
+ *
+ * Drawn panels are right when the case needs two sides to file pictures that disagree and
+ * nothing in stock does that on demand. A real photograph is better whenever one exists,
+ * because the arbitrator is being asked to describe what it sees and a photograph of an
+ * actual broken headlight is a harder thing to describe convincingly than a grey rectangle
+ * with a line on it. Anything starting file: is read from image_test.
+ */
+type Shot = "damaged" | "clean" | `file:${string}`;
+
+async function shot(spec: Shot) {
+  if (!spec.startsWith("file:")) return panel(spec as "damaged" | "clean");
+  return readFile(new URL(`../../image_test/${spec.slice(5)}`, import.meta.url));
 }
 
 const CASES: Case[] = [
@@ -194,6 +218,32 @@ const CASES: Case[] = [
     photo: "homes",
     flow: "active",
   },
+  {
+    title: "Civic Type R",
+    category: "vehicle",
+    description: "Boost Blue, manual, stock. Weekend hire only.",
+    pricePerDay: "100",
+    deposit: "500",
+    existingListing: "Civic Type R",
+    ownerSays:
+      "The nearside headlight is smashed through to the housing. It was intact when he took it, and the photograph I took at handover shows that.",
+    renterSays:
+      "Something flicked up off the road on the way back. There is a scuff on the bumper, that is all I saw. I did not notice anything wrong with the light.",
+    chat: [
+      { from: "owner", body: "Back safely? Anything I should know about." },
+      { from: "renter", body: "All good, picked up a small scuff on the front bumper, sorry about that." },
+      { from: "owner", body: "That is not a scuff. The headlight is in pieces. Have you looked at it." },
+    ],
+    expect: "the photographs disagree about how bad it is, not about whether it happened",
+    // Real photographs, and the case is built on the gap between them. The owner files a
+    // headlight broken through to the housing; the renter files the light scuff they
+    // admitted to. Both are of the same blue car, so neither can be dismissed as a picture
+    // of something else, and the arbitrator has to weigh severity rather than identity.
+    photos: { owner: "file:Civic/be_den_hau.png", renter: "file:Civic/tray_can.png" },
+    handover: { checkin: "file:Civic/civic_1.jpg", checkout: "file:Civic/be_den_hau.png" },
+    photo: "file:Civic/civic_1.jpg",
+    flow: "returned",
+  },
 ];
 
 async function wait(hash: `0x${string}`, label: string) {
@@ -239,12 +289,35 @@ async function main() {
 
   console.log(`owner  ${owner.address}\nrenter ${renter.address}\n`);
 
-  for (const item of CASES) {
+  // One case at a time when a title is given, so a rerun does not spend a dozen real
+  // transactions rebuilding rentals that already exist.
+  const only = process.argv[2];
+  const chosen = only ? CASES.filter((c) => c.title.includes(only)) : CASES;
+  if (!chosen.length) throw new Error(`No case matching "${only}".`);
+
+  for (const item of chosen) {
     console.log(`\n=== ${item.title} ===`);
+
+    // Reuse the one that is already on the marketplace, when the case names one. Posting a
+    // second copy would leave two of the same thing on the page with only one of them
+    // attached to the dispute anybody ends up reading.
+    const existing = item.existingListing
+      ? await supabase
+          .from("listings")
+          .select("id")
+          .eq("title", item.existingListing)
+          .limit(1)
+          .maybeSingle()
+      : null;
+    if (item.existingListing && !existing?.data) {
+      throw new Error(`No published listing titled "${item.existingListing}".`);
+    }
 
     // The listing, published and already approved by the moderator. Running it through the
     // checker again would spend a request on a decision this script is not testing.
-    const { data: listing, error } = await supabase
+    const { data: listing, error } = existing?.data
+      ? { data: existing.data, error: null }
+      : await supabase
       .from("listings")
       .insert({
         owner_address: owner.address.toLowerCase(),
@@ -263,8 +336,11 @@ async function main() {
     // What the listing advertised, in the public bucket the app uses, so the arbitrator sees
     // it before anything that was filed afterwards. The same file twice: two angles would be
     // better and two photographs of the same thing is what a listing actually has.
-    const advert = await readFile(new URL(`../public/landing/${item.photo}.jpg`, import.meta.url));
-    for (const index of [0, 1]) {
+    const reused = Boolean(existing?.data);
+    const advert = item.photo.startsWith("file:")
+      ? await readFile(new URL(`../../image_test/${item.photo.slice(5)}`, import.meta.url))
+      : await readFile(new URL(`../public/landing/${item.photo}.jpg`, import.meta.url));
+    for (const index of reused ? [] : [0, 1]) {
       const path = `${listing.id}/${index}.jpg`;
       const { error: imageError } = await supabase.storage
         .from(LISTING_IMAGE_BUCKET)
@@ -280,7 +356,10 @@ async function main() {
     // Through the real checker, so /admin gets a row for the listing as well as for the
     // dispute. Approved listings are logged too: a log of refusals only is a log that
     // cannot tell you the checker is passing everything.
-    const check = await moderateListing({
+    // A listing already on the marketplace was already checked. Running it again would put
+    // a second row in the log for one listing and spend a model call to reach the same
+    // answer.
+    const check = reused ? null : await moderateListing({
       title: item.title,
       description: item.description,
       // The same file the listing shows, not a stand-in. A checker judged on one image and
@@ -288,7 +367,7 @@ async function main() {
       images: [`data:image/jpeg;base64,${advert.toString("base64")}`],
       listingId: listing.id,
     });
-    console.log(`  listing check: ${check.decision}${check.reasons.length ? " - " + check.reasons.join(" | ") : ""}`);
+    if (check) console.log(`  listing check: ${check.decision}${check.reasons.length ? " - " + check.reasons.join(" | ") : ""}`);
 
     const price = parseUnits(item.pricePerDay, 6);
     const deposit = parseUnits(item.deposit, 6);
@@ -432,7 +511,7 @@ async function main() {
         const path = `handover/${id}/${phase}.jpg`;
         const { error: upErr } = await supabase.storage
           .from(DISPUTE_EVIDENCE_BUCKET)
-          .upload(path, await panel(item.handover[phase]), {
+          .upload(path, await shot(item.handover[phase]), {
             contentType: "image/jpeg",
             upsert: true,
           });
@@ -491,7 +570,7 @@ async function main() {
         const path = `${id}/${side}.jpg`;
         const { error: uploadError } = await supabase.storage
           .from(DISPUTE_EVIDENCE_BUCKET)
-          .upload(path, await panel(item.photos[side]), {
+          .upload(path, await shot(item.photos[side]), {
             contentType: "image/jpeg",
             upsert: true,
           });
