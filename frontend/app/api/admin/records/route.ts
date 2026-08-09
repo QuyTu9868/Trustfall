@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasAdminSession } from "@/lib/admin-session";
+import { freshCodeIsWrong, hasAdminSession } from "@/lib/admin-session";
 import { errorResponse } from "@/lib/api";
 import {
   DISPUTE_EVIDENCE_BUCKET,
@@ -25,9 +25,24 @@ import {
  * That asymmetry is the honest description of it: the chain is the source of truth, and this
  * is a filing cabinet next to it.
  */
-async function guard() {
-  if (await hasAdminSession()) return null;
-  return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+/**
+ * Two gates, not one.
+ *
+ * The session says somebody signed in recently. The code says they have the authenticator
+ * now. Reading the log needs the first; destroying part of it needs both, because those are
+ * different powers and a stolen cookie should not carry the second one.
+ *
+ * It is also what closes the sign-out hole. The cookie validates itself, so a copy of it
+ * outlives a sign-out no matter what the sign-out does, and the answer is to make sure that
+ * copy cannot delete anything.
+ */
+async function guard(code: unknown) {
+  if (!(await hasAdminSession())) {
+    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+  const wrong = freshCodeIsWrong(code);
+  if (wrong) return NextResponse.json({ error: wrong }, { status: 401 });
+  return null;
 }
 
 /** Removes files without failing the delete: an orphaned object is tidier than a half state. */
@@ -38,10 +53,10 @@ async function removeAll(bucket: string, paths: string[]) {
 
 export async function DELETE(request: Request) {
   try {
-    const denied = await guard();
+    const url = new URL(request.url);
+    const denied = await guard(url.searchParams.get("code"));
     if (denied) return denied;
 
-    const url = new URL(request.url);
     const rentalId = url.searchParams.get("rentalId");
     const listingId = url.searchParams.get("listingId");
     const supabase = getSupabaseAdmin();
@@ -127,10 +142,10 @@ const FIELDS = ["title", "description", "price_per_day", "deposit", "category"] 
 
 export async function PATCH(request: Request) {
   try {
-    const denied = await guard();
+    const body = (await request.json()) as Record<string, unknown>;
+    const denied = await guard(body.code);
     if (denied) return denied;
 
-    const body = (await request.json()) as Record<string, unknown>;
     const listingId = String(body.listingId ?? "");
     if (!listingId) return NextResponse.json({ error: "Which listing?" }, { status: 400 });
 

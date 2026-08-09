@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { verifyCode } from "./totp";
 
 /**
  * Proof that somebody typed a valid code recently, in a cookie they cannot forge.
@@ -11,7 +12,7 @@ import { cookies } from "next/headers";
  * codes anyway.
  */
 const COOKIE = "trustfall-admin";
-const HOURS = 8;
+const HOURS = 2;
 
 function secret() {
   const value = process.env.ADMIN_TOTP_SECRET;
@@ -36,6 +37,22 @@ export async function startAdminSession() {
   });
 }
 
+/**
+ * Signs out this browser, and only this browser.
+ *
+ * Worth being precise about, because the name promises more than it delivers. The cookie
+ * validates itself: an expiry and a signature over it, with nothing recorded server side. So
+ * deleting it tells this browser to forget it and does nothing at all about a copy somebody
+ * already has, which stays good until the expiry passes.
+ *
+ * Revoking it properly needs somewhere to write "sessions issued before now are void", and
+ * on serverless that has to be the database rather than memory, because each instance has
+ * its own. That is a table and a migration to protect one admin on a testnet demo.
+ *
+ * The cheaper answer is to stop the cookie being worth stealing: requireFreshCode below
+ * makes every destructive route ask for a code that is valid at that moment, so a leaked
+ * session can read the log and cannot change it. The window it can read for is two hours.
+ */
 export async function endAdminSession() {
   (await cookies()).delete(COOKIE);
 }
@@ -55,4 +72,22 @@ export async function hasAdminSession() {
   } catch {
     return false;
   }
+}
+
+/**
+ * A second gate, for the routes that can destroy something.
+ *
+ * Reading the log and emptying it are different powers and this stops them travelling on the
+ * same ticket. A session says somebody typed a code within the last two hours. This says
+ * somebody has the authenticator in their hand right now, which is the thing a stolen cookie
+ * cannot supply.
+ *
+ * It also happens to close the sign-out hole where it matters: a copy of the cookie survives
+ * a sign-out, and now the worst it can do is read.
+ */
+export function freshCodeIsWrong(code: unknown): string | null {
+  const value = String(code ?? "").trim();
+  if (!value) return "This needs a code from your authenticator.";
+  if (!verifyCode(secret(), value)) return "That code is not valid.";
+  return null;
 }

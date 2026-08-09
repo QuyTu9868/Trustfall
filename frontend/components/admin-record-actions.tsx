@@ -29,12 +29,17 @@ export function AdminRecordActions({
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  // Asked for at the moment of acting, never stored. A session proves somebody signed in
+  // two hours ago; this proves they are holding the authenticator now, which is the thing a
+  // copied cookie cannot produce.
+  const [code, setCode] = useState("");
 
   const remove = async () => {
     setBusy(true);
     setError(null);
     try {
-      const query = rentalId ? `rentalId=${rentalId}` : `listingId=${listingId}`;
+      const query =
+        (rentalId ? `rentalId=${rentalId}` : `listingId=${listingId}`) + `&code=${encodeURIComponent(code)}`;
       const response = await fetch(`/api/admin/records?${query}`, { method: "DELETE" });
       const result = await response.json();
       if (!response.ok) {
@@ -57,7 +62,7 @@ export function AdminRecordActions({
       const response = await fetch("/api/admin/records", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ listingId, ...edits }),
+        body: JSON.stringify({ listingId, code, ...edits }),
       });
       const result = await response.json();
       if (!response.ok) setError(result.error ?? "That did not work.");
@@ -92,6 +97,15 @@ export function AdminRecordActions({
                 />
               </label>
             ))}
+            <label className="flex flex-col gap-1 text-xs text-ink-muted">
+              authenticator code
+              <input
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                inputMode="numeric"
+                className="tabular w-32 rounded-card border border-line bg-surface px-2 py-1 text-sm text-ink"
+              />
+            </label>
             <div className="flex gap-3">
               <button
                 type="button"
@@ -150,6 +164,13 @@ export function AdminRecordActions({
       {armed ? (
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm">Delete {label}? This cannot be undone.</span>
+          <input
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            placeholder="code"
+            inputMode="numeric"
+            className="tabular w-24 rounded-card border border-line bg-surface px-2 py-1 text-sm text-ink"
+          />
           <button
             type="button"
             onClick={remove}

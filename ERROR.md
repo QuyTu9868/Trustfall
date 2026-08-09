@@ -166,6 +166,35 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
 - **Skill đích:** `vibe-code-dapp` (bước dựng repo), `deploy-verify-contract` (phần
   an toàn private key)
 
+### [2026-08-09] Lặp lại đúng lỗi "test route phá huỷ bằng dữ liệu thật", lần này mất dữ liệu
+- **Chuyện gì xảy ra:** Đang kiểm xem đăng xuất rồi có bị chặn không, mình gửi
+  `DELETE /api/admin/records?rentalId=5` với niềm tin nó sẽ trả 401. Nó trả 200 và xoá
+  thật: phán quyết, hai lời khai, ảnh đèn xe vỡ, đoạn chat của đơn Civic vừa dựng xong.
+  Năm bước ngay trước đó mình đã dùng id rác `999901`, tới ca cuối thì quên.
+- **Sai ở đâu:** Cùng một lỗi đã tự ghi vào file này ngày 2026-08-08 cho route ký, chỉ
+  đổi đối tượng. Gốc rễ là **đặt kỳ vọng "cái này sẽ bị chặn" rồi lấy kỳ vọng đó làm
+  giấy phép dùng dữ liệu thật**. Mà chính vì nghi nó không chặn nên mới phải test.
+- **Luật rút ra:** Với route xoá hoặc ký, **id rác là mặc định, không phải lựa chọn**.
+  Một ca kiểm cổng chặn không cần đối tượng có thật: 401 chặn trước mọi thứ, nên
+  `rentalId=999902` chứng minh y hệt `rentalId=5`. Cụ thể hơn: khi một bộ ca đang chạy
+  bằng id rác mà có một ca dùng id thật, đó là dấu hiệu ca đó viết sai, không phải ca đó
+  đặc biệt.
+- **Skill đích:** `code-change-workflow` (mục cân độ test)
+
+### [2026-08-09] Đăng xuất không thu hồi được phiên, vì cookie tự xác thực
+- **Chuyện gì xảy ra:** Gọi `DELETE /api/admin` để đăng xuất, rồi gửi tiếp request với
+  đúng cookie cũ. Nó vẫn qua. Phát hiện tình cờ trong lúc test, không phải do tìm ra.
+- **Sai ở đâu:** Cookie phiên là `{hạn}.{HMAC(hạn)}`, server không lưu gì. `cookies().delete()`
+  chỉ bảo trình duyệt bỏ đi, không làm chuỗi đó mất giá trị. Ai giữ được bản sao thì dùng
+  tiếp tới lúc hết hạn. Cái này vô hại khi `/admin` chỉ đọc, và thành lỗ hổng ngay lúc
+  thêm nút xoá vào cùng trang, mà mình thêm nút xoá xong không rà lại tầng phiên.
+- **Luật rút ra:** **Thêm quyền phá huỷ vào một trang thì phải xét lại cả tầng xác thực
+  của trang đó**, không chỉ viết guard cho route mới. Và với phiên không trạng thái thì
+  đừng hứa thu hồi: hoặc lưu trạng thái ở server, hoặc bắt xác thực lại ngay lúc hành
+  động. Ở đây chọn cách hai, mỗi lệnh xoá và sửa phải kèm mã TOTP còn hiệu lực, nên
+  cookie bị lộ đọc được log mà không xoá được gì.
+- **Skill đích:** `vibe-code-dapp` (phần phiên đăng nhập), `dapp-production-checklist`
+
 ### [2026-08-08] Bảo user chạy Simulate ở trang khác trong khi latch chưa được lưu
 - **Chuyện gì xảy ra:** Dựng xong 6 filter Latch, mình bảo user sang mục Simulate ở menu
   bên trái để kiểm trước rồi hãy Activate. Latch chỉ lưu khi bấm `Activate latch`, nên
