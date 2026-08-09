@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { AdminRecordActions } from "@/components/admin-record-actions";
 import { explorerTxUrl } from "@/lib/chain";
 import {
   DEPOSIT_ONLY,
@@ -235,6 +236,8 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
           </div>
         )}
       </section>
+
+      <AdminRecordActions rentalId={verdict.onchain_rental_id} label={`rental #${verdict.onchain_rental_id}`} />
     </main>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { AdminRecordActions } from "@/components/admin-record-actions";
 import type { Check, ListingRow } from "@/lib/admin-view";
 
 type Detail = { listing: ListingRow; images: string[]; checks: Check[] };
@@ -166,6 +167,8 @@ export default function AdminListingPage({ params }: { params: Promise<{ id: str
           </ol>
         )}
       </section>
+
+      <AdminRecordActions listingId={listing.id} label={listing.title} />
     </main>
   );
 }

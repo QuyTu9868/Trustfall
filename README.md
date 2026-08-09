@@ -43,8 +43,18 @@ without a single component changing.
 [![Admin sign in](screenshots/admin-locked.jpg)](screenshots/admin-locked.jpg)
 
 /admin is deliberately not part of the app: no navigation, no wallet, no footer. It is a
-record about the app rather than a page that acts on anybody's behalf, and it is read only
-because only the agent's address can settle a dispute on chain.
+record about the app rather than a page that acts on anybody's behalf.
+
+It can delete, and that is worth stating plainly rather than discovering. A signed-in admin
+can remove Trustfall's account of a dispute, or a listing, so a demo does not accumulate
+test rentals nobody wants in the log. Which makes this log weaker evidence than one nothing
+can touch, and the trade is deliberate.
+
+What it cannot do is the half that matters. The contract has no admin function of any kind:
+no address can move a settled deposit, reverse a ruling, or remove a rental. Deleting the
+record leaves the dispute on Sepolia with the same money in the same place, readable by
+anybody holding the rental id. So the filing can be thrown away and the fact cannot, which
+is the only arrangement under which an editable log is defensible at all.
 
 ## How a rental goes
 
