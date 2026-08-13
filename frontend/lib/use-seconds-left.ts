@@ -18,9 +18,13 @@ import { targetChain } from "./chain";
  * countdown and the button it unlocks read one clock rather than two.
  */
 export function useSecondsLeft(target: bigint) {
+  // Thirty seconds, not wagmi's four. Both this and useSecondsLeft ask for the same block,
+  // so React Query serves them from one query, and the only question is how often that one
+  // query costs a request. A countdown measured in days does not need the answer to the
+  // second, and at four seconds this was a fifth of the RPC bill on its own.
   const { data: block } = useBlock({
     chainId: targetChain.id,
-    watch: true,
+    watch: { pollingInterval: 30_000 },
   });
 
   // Starting at zero would mean "the deadline has passed" for the one render before the

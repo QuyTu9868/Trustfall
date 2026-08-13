@@ -16,14 +16,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Keeps polling in a window that is not focused. React Query pauses intervals
-            // when a tab loses focus, which is sensible for one tab and wrong here: the
-            // whole product is two people acting on the same rental, and testing it means
-            // two windows side by side. One of them is always unfocused, and that one used
-            // to sit on stale data until it was clicked, looking like the chain had not
-            // moved. Chat and the bell never showed this because they poll with plain
-            // intervals, which nothing pauses.
-            refetchIntervalInBackground: true,
+            // React Query's default: an unfocused tab stops polling. This used to be turned
+            // off, for a reason that was real. Testing this product means two windows side
+            // by side, one of them is always unfocused, and that one sat on stale data
+            // until it was clicked, looking like the chain had not moved.
+            //
+            // The fix cost more than the problem. An unfocused tab kept reading the contract
+            // forever, measured at 2.3M Alchemy compute units a day, against a free month of
+            // 30M. A window left open over a weekend spends the month.
+            //
+            // So the default comes back, and refetchOnWindowFocus covers the case it was
+            // meant to solve: clicking into the stale window refreshes it before you have
+            // finished looking at it. That is a moment of staleness on focus rather than a
+            // tab that quietly bills all night.
+            refetchOnWindowFocus: true,
           },
         },
       })

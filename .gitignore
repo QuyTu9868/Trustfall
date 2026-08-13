@@ -45,3 +45,7 @@ Latch_files/
 
 # Carries the gateway secret in plaintext so it can be pasted into a browser console.
 services/latch/console-snippet.txt
+
+# Playwright leftovers. Screenshots are worth keeping, traces and videos are not.
+frontend/e2e/.artifacts/
+frontend/playwright-report/

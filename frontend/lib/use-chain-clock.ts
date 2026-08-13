@@ -21,7 +21,14 @@ import { targetChain } from "./chain";
  * question, which is the definition of not being pure.
  */
 export function useChainNowSeconds() {
-  const { data: block } = useBlock({ chainId: targetChain.id, watch: true });
+  // Thirty seconds, not wagmi's four. Both this and useSecondsLeft ask for the same block,
+  // so React Query serves them from one query, and the only question is how often that one
+  // query costs a request. A countdown measured in days does not need the answer to the
+  // second, and at four seconds this was a fifth of the RPC bill on its own.
+  const { data: block } = useBlock({
+    chainId: targetChain.id,
+    watch: { pollingInterval: 30_000 },
+  });
   const chainTime = block?.timestamp;
   const [now, setNow] = useState(0);
 
