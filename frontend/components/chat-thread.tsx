@@ -15,7 +15,7 @@ type Message = {
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /** How often the thread asks for new messages while it is on screen. */
-const POLL_MS = 5000;
+const POLL_MS = 15000;
 
 /**
  * The conversation for one rental.
@@ -69,10 +69,23 @@ export function ChatThread({ rentalId }: { rentalId: bigint }) {
     };
 
     void load();
-    const timer = setInterval(load, POLL_MS);
+    // Nothing while the tab is hidden. A bare setInterval keeps firing behind another
+    // window, on a minimised browser, and with the lid shut, and each of these polls makes
+    // the server read the contract on its behalf. Measured at roughly 35,000 chain reads a
+    // day from one rental page nobody was looking at.
+    //
+    // Firing on visibilitychange as well, so coming back to the window refreshes it at once
+    // rather than up to one interval later. That was the reason background polling got
+    // turned on in the first place, and this buys it for nothing.
+    const tick = () => {
+      if (!document.hidden) void load();
+    };
+    const timer = setInterval(tick, POLL_MS);
+    document.addEventListener("visibilitychange", tick);
     return () => {
       active = false;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
     };
   }, [rentalId, reloads]);
 
