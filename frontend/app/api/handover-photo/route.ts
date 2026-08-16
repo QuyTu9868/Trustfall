@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
 import { notifyHandoverPhoto } from "@/lib/notify";
-import { readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
+import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { readRentalAsParty } from "@/lib/rental-server";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "@/lib/supabase-server";
 
@@ -122,6 +122,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof AuthError) return errorResponse(error, 401);
     return errorResponse(error);
   }
 }
@@ -161,6 +162,7 @@ export async function GET(request: Request) {
       })),
     });
   } catch (error) {
+    if (error instanceof AuthError) return errorResponse(error, 401);
     return errorResponse(error);
   }
 }

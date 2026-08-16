@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
-import { readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
+import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { readRentalAsParty } from "@/lib/rental-server";
 import { resolveDispute } from "@/lib/resolve-dispute";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       });
     }
   } catch (error) {
+    if (error instanceof AuthError) return errorResponse(error, 401);
     return errorResponse(error);
   }
 }
