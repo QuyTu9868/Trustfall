@@ -36,6 +36,11 @@ const IGNORED = [
   // React hydration warnings are worth knowing about but are not a broken page, and this
   // suite is about whether the page works at all.
   /Warning:/,
+  // /admin answers 401 to a signed-out visitor on purpose, and the browser logs that as a
+  // console error regardless of whether the app expected it. A real auth failure elsewhere
+  // still shows up: this pattern only matches the specific bare "status of 401" line Chrome
+  // prints for a failed fetch, not a page that says something went wrong.
+  /status of 401/,
 ];
 
 function watchConsole(page: Page) {
@@ -84,22 +89,24 @@ for (const target of PUBLIC_PAGES) {
 /**
  * A listing page with real data in it, which is the state the skill says gets skipped.
  *
- * The id comes from the marketplace page rather than from an API, because there is no GET on
- * /api/listings: the list is read straight from the database in a server component, so the
- * only way to find a real listing is the way a person finds one. That makes this test cover
- * the hop as well as the destination.
+ * The id comes from the marketplace's own HTML rather than from an API or from navigating
+ * there: there is no GET on /api/listings, the list is read straight from the database in a
+ * server component, and the page it renders on is client-gated by SignedInOnly, which
+ * replaces the markup with a redirect to /homepage the instant its effect runs. The server
+ * still sends the real grid on the first response, before any JavaScript executes, so a raw
+ * request for the HTML sees it and a navigation would not.
  */
-test("a listing detail page renders with real data", async ({ page }) => {
+test("a listing detail page renders with real data", async ({ page, request }) => {
   const errors = watchConsole(page);
 
-  await page.goto("/list", { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle").catch(() => {});
+  const html = await (await request.get("/")).text();
+  // Next ships the listing grid as an RSC payload embedded in the page, not as ordinary
+  // <a href="..."> markup, so the link shows up escaped: \"href\":\"/listings/{id}\".
+  // Matching only the id keeps this independent of which form the quotes take.
+  const match = html.match(/listings\\?\/([a-z0-9-]{36})/i);
+  expect(match, "no listing links in the marketplace's server-rendered HTML").not.toBeNull();
 
-  const first = page.locator('a[href^="/listings/"]').first();
-  await expect(first, "no listings on the marketplace page").toBeVisible();
-  const href = await first.getAttribute("href");
-
-  await page.goto(href!, { waitUntil: "domcontentloaded" });
+  await page.goto(`/listings/${match![1]}`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle").catch(() => {});
 
   const text = await page.textContent("body");
