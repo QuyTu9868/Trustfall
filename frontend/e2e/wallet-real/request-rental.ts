@@ -44,7 +44,14 @@ import { sepolia } from "viem/chains";
 import { escrowAbi, listingIdToBytes32, toRental, type RentalTuple } from "../../lib/escrow";
 import deployed from "../../lib/deployed.json";
 
-const SITE = "https://trustfall-latch.vercel.app";
+/**
+ * Deployed by default, overridable with SITE.
+ *
+ * A local dev server still reads Sepolia, because which chain the app talks to is a build
+ * setting rather than a property of where it is served from. So pointing this at
+ * localhost:3000 checks a change against real chain data without waiting on a deploy.
+ */
+const SITE = process.env.SITE ?? "https://trustfall-latch.vercel.app";
 const LISTING_TITLE = "Honda Wave 110, 2019";
 
 const escrow = deployed["11155111"].rentalEscrow as `0x${string}`;
