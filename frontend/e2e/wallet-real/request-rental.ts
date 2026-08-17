@@ -381,8 +381,12 @@ async function main() {
   // this script that needed running twenty times today is worth being able to run alone.
   if (process.env.CONNECT_ONLY) {
     await appPage.goto(`${SITE}/rentals`, { waitUntil: "networkidle" }).catch(() => {});
-    await appPage.waitForTimeout(4000);
+    // Long enough for the log scan to come back. It is several requests to a public node,
+    // which is slower than the state reads beside it and is the thing worth looking at.
+    await appPage.waitForTimeout(12_000);
+    await appPage.screenshot({ path: "e2e/shots/wallet-real-rentals.png", fullPage: true });
     console.log("\nCONNECT_ONLY: signed in, nothing requested, no gas spent.");
+    console.log("Rentals page: e2e/shots/wallet-real-rentals.png");
     await context.close();
     return;
   }
