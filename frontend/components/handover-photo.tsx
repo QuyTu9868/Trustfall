@@ -1,7 +1,7 @@
 "use client";
 
 import { useIdentityToken } from "@privy-io/react-auth";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Photo = {
   phase: "checkin" | "checkout";
@@ -50,6 +50,13 @@ export function HandoverPhoto({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
+
+  const preview = useMemo(() => (chosen ? URL.createObjectURL(chosen) : null), [chosen]);
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
   useEffect(() => {
     let active = true;
@@ -154,6 +161,11 @@ export function HandoverPhoto({
         placeholder="What should the other person look at? Optional, and it goes with the photo."
         className="rounded-control border border-line bg-surface px-3 py-2 text-sm"
       />
+
+      {preview && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={preview} alt="What you are about to send" className="max-h-72 w-full rounded-card object-contain" />
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="cursor-pointer rounded-control border border-line bg-surface px-4 py-2 text-sm">

@@ -21,6 +21,15 @@ type Ruling = {
 };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Mirrors ARBITRATION_DELAY_MS in app/api/disputes/route.ts. */
+const ARBITRATION_TARGET_MS = 30 * 1000;
+
+const STAGES = [
+  { until: 20, label: "Reading what was filed" },
+  { until: 55, label: "Comparing the photographs" },
+  { until: 85, label: "Weighing it against policy" },
+  { until: 100, label: "Preparing to sign" },
+] as const;
 
 /** What each outcome means for the deposit, in the words somebody losing would read. */
 const OUTCOME: Record<Ruling["verdict"], string> = {
@@ -43,6 +52,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
   const { identityToken } = useIdentityToken();
 
   const [mine, setMine] = useState<"owner" | "renter" | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [filed, setFiled] = useState<Filed[] | null>(null);
   const [ruling, setRuling] = useState<Ruling | null>(null);
   const [settled, setSettled] = useState<Settled>(null);
@@ -55,6 +65,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   const preview = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   useEffect(() => {
@@ -73,6 +84,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
         const result = await response.json();
         if (!active) return;
         setMine(result.mine);
+        setStatus(result.status as string);
         setFiled(result.evidence as Filed[]);
         setRuling(result.verdict as Ruling | null);
         setSettled((result.settled ?? null) as Settled);
@@ -130,9 +142,27 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
     }
   }
 
+  const stillOpen = status === "Disputed";
   const alreadyFiled = filed?.some((entry) => entry.side === mine);
   const waitingOnThem = filed?.length === 1 && alreadyFiled;
   const bothFiled = (filed?.length ?? 0) >= 2;
+
+  // The clock behind the progress bar. Only ticks while there is something to count down,
+  // so it stops the moment a ruling lands rather than running for the rest of the visit.
+  const pending = bothFiled && !ruling;
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [pending]);
+
+  const secondFiledAt = bothFiled && filed ? new Date(filed[filed.length - 1].created_at).getTime() : null;
+  const elapsedSinceFiled = secondFiledAt ? now - secondFiledAt : 0;
+  const arbitrationPercent = secondFiledAt
+    ? Math.min(97, (elapsedSinceFiled / ARBITRATION_TARGET_MS) * 100)
+    : 0;
+  const arbitrationStage = STAGES.find((stage) => arbitrationPercent < stage.until) ?? STAGES.at(-1)!;
+  const overdue = secondFiledAt !== null && elapsedSinceFiled >= ARBITRATION_TARGET_MS;
 
   async function retry() {
     setSending(true);
@@ -191,7 +221,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
   return (
     <section className="flex flex-col gap-4 rounded-card border border-stop-ink/30 bg-stop-bg/40 p-4">
       <div className="flex flex-col gap-1">
-        <h3 className="text-sm">Dispute</h3>
+        <h3 className="text-sm">Dispute{!stillOpen && status ? " (resolved)" : ""}</h3>
         <p className="text-xs text-ink-muted">
           Both accounts go to an arbitrator, which reads the statements and your
           conversation and picks one of three outcomes for the deposit. It never sees an
@@ -220,7 +250,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
         </div>
       ))}
 
-      {!alreadyFiled && (
+      {!alreadyFiled && stillOpen && (
         <div className="flex flex-col gap-2">
           <textarea
             value={statement}
@@ -267,10 +297,29 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
         </div>
       )}
 
+      {/* Both sides have said their piece and nothing has been decided yet. The arbitrator
+          is genuinely going to read this; it is just not doing so this second, so this bar
+          is the only place that fact would otherwise be invisible for several minutes. */}
+      {stillOpen && bothFiled && !ruling && !overdue && (
+        <div className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-sm">The arbitrator is reading it</span>
+            <span className="tabular text-xs text-ink-muted">{arbitrationStage.label}</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-canvas">
+            <div
+              className="h-full rounded-full bg-ink-strong transition-[width] duration-1000 ease-linear"
+              style={{ width: `${arbitrationPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* The arbitrator can fail for reasons that have nothing to do with the dispute: a
           busy minute, a request over the plan's limit. Without a way to ask again, that
-          leaves the deposit stuck until the seven day timeout decides it by default. */}
-      {bothFiled && !ruling?.signed && (
+          leaves the deposit stuck until the seven day timeout decides it by default. Also
+          the fallback once the bar above has run its course and nothing has landed yet. */}
+      {stillOpen && bothFiled && !ruling?.signed && (Boolean(ruling) || overdue) && (
         <button
           onClick={retry}
           disabled={sending}
@@ -280,7 +329,7 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
         </button>
       )}
 
-      {waitingOnThem && !ruling && (
+      {stillOpen && waitingOnThem && !ruling && (
         <p className="text-xs text-ink-muted">
           Filed. Waiting for the other side. If they say nothing for a day, the arbitrator
           rules on what it has.

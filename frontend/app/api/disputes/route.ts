@@ -19,6 +19,17 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
  */
 const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * How long to wait, once both sides have filed, before actually asking the arbitrator.
+ *
+ * Not real work: the model itself answers in well under a minute. This gap exists so a
+ * dispute filed live has something to watch rather than a verdict that appears between
+ * one poll and the next. It is a delay on WHEN resolveDispute runs, not inside it, because
+ * Vercel's Hobby plan caps a function at 60 seconds and resolveDispute already gets close
+ * to that on its own.
+ */
+const ARBITRATION_DELAY_MS = 30 * 1000;
+
 /** What each side has filed, and what the arbitrator made of it. */
 export async function GET(request: Request) {
   try {
@@ -54,6 +65,14 @@ export async function GET(request: Request) {
       for (const entry of signed ?? []) {
         if (entry.path && entry.signedUrl) links.set(entry.path, entry.signedUrl);
       }
+    }
+
+    // The nudge that actually moves a paced dispute forward. Filing only schedules the
+    // arbitrator; nothing else was going to check back in five minutes to run it. The
+    // client already polls this endpoint every 20 seconds while a dispute is open, so
+    // that polling is what drives the clock instead of a second thing to deploy.
+    if (rental.status === "Disputed" && !verdict) {
+      after(() => maybeArbitrate(rental.id));
     }
 
     // The statements are shown to both sides. Arguing about somebody's deposit behind
@@ -207,6 +226,14 @@ async function maybeArbitrate(rentalId: bigint) {
   const waitedLongEnough =
     Date.now() - new Date(filed[0].created_at).getTime() >= REPLY_WINDOW_MS;
   if (!bothIn && !waitedLongEnough) return null;
+
+  // Both sides filed quickly, which is the common case in a demo, so hold off rather than
+  // ruling the moment the second statement lands. The one-sided path above already took a
+  // full day to get here and is not paced further on top of that.
+  if (bothIn) {
+    const secondFiledAt = new Date(filed[filed.length - 1].created_at).getTime();
+    if (Date.now() - secondFiledAt < ARBITRATION_DELAY_MS) return null;
+  }
 
   try {
     return await resolveDispute(rentalId);

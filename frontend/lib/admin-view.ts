@@ -32,6 +32,20 @@ export type ChatLine = {
   created_at: string;
 };
 
+/** A photograph taken at check-in or check-out, unconditionally, dispute or not. */
+export type Handover = {
+  phase: "checkin" | "checkout";
+  note: string | null;
+  image_url: string | null;
+  created_at: string;
+};
+
+/** A dispute that has been filed but not yet judged: the arbitrator is still reading it. */
+export type Pending = {
+  onchain_rental_id: number;
+  filed_at: string;
+};
+
 /** A listing the checker looked at, and what it made of it. */
 export type Check = {
   id: number;

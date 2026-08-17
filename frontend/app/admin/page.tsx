@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { OUTCOME, type Check, type Verdict } from "@/lib/admin-view";
+import { OUTCOME, type Check, type Pending, type Verdict } from "@/lib/admin-view";
 
 /**
  * Every ruling the arbitrator reached, one line each.
@@ -22,6 +22,7 @@ import { OUTCOME, type Check, type Verdict } from "@/lib/admin-view";
  */
 export default function AdminPage() {
   const [verdicts, setVerdicts] = useState<Verdict[] | null>(null);
+  const [pending, setPending] = useState<Pending[]>([]);
   const [checks, setChecks] = useState<Check[]>([]);
   const [locked, setLocked] = useState(true);
   const [code, setCode] = useState("");
@@ -51,6 +52,7 @@ export default function AdminPage() {
           throw new Error(result.error ?? "The log could not be read.");
         }
         setVerdicts(result.verdicts as Verdict[]);
+        setPending((result.pending ?? []) as Pending[]);
         setChecks((result.checks ?? []) as Check[]);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "The log could not be read.");
@@ -155,6 +157,31 @@ export default function AdminPage() {
           {error}
         </p>
       )}
+
+      {/* Filed but not judged yet: there is no verdict row for these, so they would
+          otherwise be invisible until the arbitrator finishes. Shown here mostly so a
+          dispute in progress does not read as nothing happening. */}
+      {pending.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {pending.map((entry) => (
+            <Link
+              key={entry.onchain_rental_id}
+              href={`/rentals/${entry.onchain_rental_id}`}
+              className="flex items-center gap-3 rounded-card border border-line bg-surface p-3 text-sm transition-colors hover:bg-canvas"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pend-ink opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-pend-ink" />
+              </span>
+              <span className="tabular">Rental #{entry.onchain_rental_id}</span>
+              <span className="text-ink-muted">
+                the arbitrator is reading it, filed {new Date(entry.filed_at).toLocaleString()}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+
       {verdicts === null && !error && <p className="text-sm text-ink-muted">Loading...</p>}
       {verdicts?.length === 0 && (
         <p className="text-sm text-ink-muted">No disputes have been judged yet.</p>

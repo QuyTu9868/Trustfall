@@ -340,7 +340,14 @@ export function RentalCard({
         <HandoverPhoto rentalId={rental.id} phase="checkout" canUpload={isOwner} />
       )}
 
-      {rental.status === "Disputed" && <DisputeBox rentalId={rental.id} />}
+      {/* Stays after the dispute is resolved, not only while it is open. resolveDispute
+          moves status straight to Completed, and disputedAt is the only thing on the
+          rental that still says a dispute happened, so both sides keep seeing the
+          ruling and where the deposit went rather than losing it the moment status
+          changes. */}
+      {(rental.status === "Disputed" || rental.disputedAt > 0n) && (
+        <DisputeBox rentalId={rental.id} />
+      )}
 
       {chatOpen && <ChatThread rentalId={rental.id} />}
 

@@ -8,11 +8,18 @@ import {
   OUTCOME,
   type ChatLine,
   type Filed,
+  type Handover,
   type Settled,
   type Verdict,
 } from "@/lib/admin-view";
 
-type Detail = { verdict: Verdict; evidence: Filed[]; chat: ChatLine[]; settled: Settled };
+type Detail = {
+  verdict: Verdict;
+  evidence: Filed[];
+  handover: Handover[];
+  chat: ChatLine[];
+  settled: Settled;
+};
 
 /**
  * Where the deposit went, and the receipt for it.
@@ -115,7 +122,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
     );
   }
 
-  const { verdict, evidence, chat, settled } = detail;
+  const { verdict, evidence, handover, chat, settled } = detail;
 
   return (
     <main className="flex max-w-4xl flex-col gap-8">
@@ -209,6 +216,49 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
           {evidence.length === 0 && (
             <p className="text-sm text-ink-muted">Nothing was filed by either side.</p>
           )}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-xl">The handover photographs</h2>
+        <p className="text-sm text-ink-muted">
+          Taken at check-in and check-out regardless of a dispute, not filed for one. Shown
+          here because they are the "before and after" the arbitrator itself was given.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {(["checkin", "checkout"] as const).map((phase) => {
+            const shot = handover.find((entry) => entry.phase === phase);
+            return (
+              <article
+                key={phase}
+                className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4"
+              >
+                <span className="text-xs text-ink-muted">
+                  {phase === "checkin" ? "Check-in" : "Check-out"}
+                  {shot ? `, ${new Date(shot.created_at).toLocaleString()}` : ""}
+                </span>
+                {shot ? (
+                  <>
+                    {shot.note && (
+                      <p className="text-sm whitespace-pre-wrap break-words">{shot.note}</p>
+                    )}
+                    {shot.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={shot.image_url}
+                        alt={`The item at ${phase}`}
+                        className="max-h-80 w-full rounded-card object-contain"
+                      />
+                    ) : (
+                      <span className="text-xs text-ink-muted">No photograph on file.</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs text-ink-muted">Not taken.</span>
+                )}
+              </article>
+            );
+          })}
         </div>
       </section>
 

@@ -44,7 +44,7 @@ async function list() {
   // Both agents in one answer, because the question the page asks is what the agents have
   // been doing and there are two of them. The listing checker runs far more often, so it
   // is capped lower: a hundred rejections would bury four rulings about money.
-  const [verdicts, checks] = await Promise.all([
+  const [verdicts, checks, evidence] = await Promise.all([
     supabase
       .from("dispute_verdicts")
       .select(COLUMNS)
@@ -55,12 +55,33 @@ async function list() {
       .select("id, listing_id, decision, reasons, findings, model, created_at, listings(title)")
       .order("created_at", { ascending: false })
       .limit(50),
+    // Filed but not yet a verdict: a dispute the arbitrator has not finished reading.
+    // There is no separate "dispute opened" table, so this is read from the filings
+    // themselves rather than from the chain.
+    supabase
+      .from("dispute_evidence")
+      .select("onchain_rental_id, created_at")
+      .order("created_at", { ascending: true }),
   ]);
 
   if (verdicts.error) return NextResponse.json({ error: verdicts.error.message }, { status: 500 });
 
+  const judged = new Set((verdicts.data ?? []).map((row) => row.onchain_rental_id));
+  const firstFiledAt = new Map<number, string>();
+  for (const row of evidence.data ?? []) {
+    if (judged.has(row.onchain_rental_id)) continue;
+    if (!firstFiledAt.has(row.onchain_rental_id)) {
+      firstFiledAt.set(row.onchain_rental_id, row.created_at);
+    }
+  }
+  const pending = [...firstFiledAt.entries()].map(([onchain_rental_id, filed_at]) => ({
+    onchain_rental_id,
+    filed_at,
+  }));
+
   return NextResponse.json({
     verdicts: verdicts.data ?? [],
+    pending,
     // A missing listing_checks table is not a reason to hide the rulings. Migration 010
     // may not have been run yet, and the arbitrator log is the half that matters.
     checks: (checks.data ?? []).map((row) => {
@@ -105,9 +126,19 @@ async function one(rentalId: number) {
     .eq("onchain_rental_id", rentalId)
     .order("created_at");
 
-  const paths = (evidence ?? [])
-    .map((row) => row.image_path)
-    .filter((path): path is string => Boolean(path));
+  // The two handover photographs, separate from what was filed for the dispute itself.
+  // These are taken unconditionally at check-in and check-out, dispute or not, and a
+  // reader auditing a ruling should see the same "before and after" the arbitrator did.
+  const { data: handover } = await supabase
+    .from("handover_photos")
+    .select("phase, image_path, note, created_at")
+    .eq("onchain_rental_id", rentalId)
+    .order("created_at");
+
+  const paths = [
+    ...(evidence ?? []).map((row) => row.image_path),
+    ...(handover ?? []).map((row) => row.image_path),
+  ].filter((path): path is string => Boolean(path));
   const links = new Map<string, string>();
   if (paths.length) {
     const { data: signed } = await supabase.storage
@@ -128,6 +159,12 @@ async function one(rentalId: number) {
     evidence: (evidence ?? []).map((entry) => ({
       side: entry.side,
       statement: entry.statement,
+      created_at: entry.created_at,
+      image_url: entry.image_path ? (links.get(entry.image_path) ?? null) : null,
+    })),
+    handover: (handover ?? []).map((entry) => ({
+      phase: entry.phase,
+      note: entry.note,
       created_at: entry.created_at,
       image_url: entry.image_path ? (links.get(entry.image_path) ?? null) : null,
     })),
