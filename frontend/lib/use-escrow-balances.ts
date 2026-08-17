@@ -6,6 +6,7 @@ import { useAccount, useConfig } from "wagmi";
 import { getPublicClient } from "wagmi/actions";
 import { targetChain } from "./chain";
 import { type Rental, escrowAddress } from "./escrow";
+import { scanBack } from "./event-scan";
 
 const RENT_SETTLED = parseAbiItem(
   "event RentSettled(uint256 indexed id, uint256 charged, uint256 toOwner, uint256 fee, uint256 refundedToRenter)"
@@ -49,24 +50,18 @@ export function useEscrowBalances(rentals: Rental[]) {
       // One request for every settlement, then matched up locally. Asking per rental would
       // be one round trip each, and this page already reads the whole list.
       const settled = new Map<bigint, { toOwner: bigint; refundedToRenter: bigint }>();
-      if (client) {
-        try {
-          const logs = await client.getLogs({
-            address: escrowAddress,
-            event: RENT_SETTLED,
-            fromBlock: "earliest",
-          });
-          for (const log of logs) {
-            if (log.args?.id === undefined) continue;
-            settled.set(log.args.id as bigint, {
-              toOwner: log.args.toOwner as bigint,
-              refundedToRenter: log.args.refundedToRenter as bigint,
-            });
-          }
-        } catch {
-          // Without the events the released figure is understated rather than wrong, and
-          // the held figure does not depend on them at all.
-        }
+      // Every window, not the first with a hit: this totals a whole history rather than
+      // finding one rental, so stopping early would understate it. scanBack never throws,
+      // and a window it could not read costs completeness rather than the whole figure.
+      const logs = await scanBack(client, { address: escrowAddress, event: RENT_SETTLED });
+      for (const log of logs) {
+        const args = (log as { args?: { id?: bigint; toOwner?: bigint; refundedToRenter?: bigint } })
+          .args;
+        if (args?.id === undefined) continue;
+        settled.set(args.id, {
+          toOwner: args.toOwner as bigint,
+          refundedToRenter: args.refundedToRenter as bigint,
+        });
       }
 
       let held = 0n;
