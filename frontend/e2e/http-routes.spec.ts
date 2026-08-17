@@ -56,9 +56,14 @@ test.describe("price-hint", () => {
     const response = await request.get("/api/price-hint?category=vehicle");
     expect(response.ok()).toBeTruthy();
     const body = await response.json();
-    // CLAUDE.md section 9: the hint is a median of real listings or nothing, never a guess.
+    // CLAUDE.md section 9: the hint is real listings' interquartile range or nothing,
+    // never a guess. { count, low, high }, not a single number.
     expect(body).toHaveProperty("hint");
-    if (body.hint !== null) expect(typeof body.hint).toBe("number");
+    if (body.hint !== null) {
+      expect(typeof body.hint.count).toBe("number");
+      expect(typeof body.hint.low).toBe("number");
+      expect(typeof body.hint.high).toBe("number");
+    }
   });
 });
 
