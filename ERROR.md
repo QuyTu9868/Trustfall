@@ -209,6 +209,43 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
 - **Skill đích:** `latch-agent-gateway` (đã thêm mục "latch chưa được lưu cho tới khi
   bấm Activate")
 
+### [2026-08-17] Dùng lại `isVisible()` ngay dưới đoạn comment mình viết để cảnh báo nó
+- **Chuyện gì xảy ra:** Trong script ký ví, mình đã tốn một buổi để phát hiện
+  `locator.isVisible({timeout})` **không chờ** dù nhận tham số timeout, rồi tự viết một
+  comment dài mười dòng ngay trong file để cảnh báo. Vài giờ sau, khi thêm hai click tuỳ
+  chọn vào cùng file đó, mình viết `if (await chooser.isVisible()) await chooser.click()`.
+  Modal còn đang chạy animation nên cả hai click bị bỏ qua im lặng, luồng đứng lại ở màn
+  đầu tiên, và log không có một dòng nào nói vì sao.
+- **Sai ở đâu:** Cái comment cảnh báo nằm cách chỗ mình gõ đúng ba mươi dòng. Mình đã
+  đọc nó, viết nó, mà vẫn tái phạm, vì lúc cần một phép kiểm "có hay không" thì
+  `isVisible` là cái tên đọc lên nghe đúng nghĩa nhất. Tên hàm thắng cả ghi chú của
+  chính mình.
+- **Luật rút ra:** Với Playwright, **`isVisible()` chỉ dùng khi thật sự muốn hỏi về đúng
+  khoảnh khắc này**, và trong một script điều khiển UI thì gần như không bao giờ muốn
+  thế. Cần "có thì bấm" thì viết `waitFor({state:"visible", timeout}).then(()=>true).catch(()=>false)`.
+  Rộng hơn: khi một API có bản chờ và bản không chờ, mặc định chọn bản chờ, và coi mọi
+  lần dùng bản không chờ là chỗ phải giải thích được.
+- **Skill đích:** `frontend-e2e-wallet`
+
+### [2026-08-17] `catch {}` lại ăn một lỗi, và test nhìn màn hình không thể thấy
+- **Chuyện gì xảy ra:** Hai hook đọc event của contract bằng `fromBlock: "earliest"`.
+  Alchemy gói free chặn `eth_getLogs` quá 10 block và trả 400 kèm lời giải thích rõ ràng.
+  Cả hai chỗ bọc `catch {}`, nên trên Sepolia dòng "Rent charged / To the owner / Platform
+  fee" **chưa từng một lần hiện ra**, và ô "Released to you" luôn là `0.00 USDC`. Bộ test
+  trang chạy 8/8 xanh suốt, vì nó xem màn hình, mà trên màn hình thì thiếu một dòng trông
+  y như "chưa có dữ liệu".
+- **Sai ở đâu:** Lỗi này đã có entry ngày 2026-08-02 ("bọc try/catch im lặng quanh một
+  lời gọi"). Lần đó mình rút ra luật về phía code. Lần này lộ ra nửa còn thiếu: nếu đã
+  có `catch` im lặng ở đâu đó thì **không có bài test nào nhìn màn hình bắt được nó**,
+  và mình không hề nghĩ tới điều đó khi viết cả ba bộ test.
+- **Luật rút ra:** Test UI phải **nghe network, không chỉ nhìn màn hình**:
+  `page.on("response", r => r.status() >= 400 && log(r.url(), await r.text()))`. Bốn dòng,
+  và chính bốn dòng đó phát hiện lỗi mà 24 bài test xanh đã bỏ qua nhiều tuần. Kèm theo:
+  một `catch` im lặng quanh lời gọi mạng là một lời hứa rằng có chỗ khác đang canh, nên
+  phải chỉ ra được chỗ đó.
+- **Skill đích:** `frontend-e2e-wallet`, `code-change-workflow` (mục B2.4: xem màn hình
+  là chưa đủ)
+
 ---
 
 ## 3. Thiếu sót khi code
@@ -947,6 +984,70 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
   chung: một lớp bảo vệ nên nói được vì sao nó từ chối, nếu không thì mỗi lần cấu hình
   sai lại thành một buổi mò.
 - **Skill đích:** `latch-agent-gateway` (mục INJECT AS), `agentic-engineering`
+
+### [2026-08-17] Đoán năm lượt liền, trong khi state của client trả lời trong một lượt
+- **Chuyện gì xảy ra:** Script ký ví duyệt xong MetaMask mà app vẫn ở trạng thái chưa
+  đăng nhập. Mình dựng giả thuyết rồi chạy lại để thử: modal đóng quá sớm, click quá
+  nhanh, màn "Review permissions" của Solana làm hỏng luồng, Privy hết giờ chờ. Năm lượt
+  chạy, mỗi lượt hai phút. Tới lượt thứ sáu mình mới dump `localStorage`, và nó nói ngay:
+  `privy:connections` có địa chỉ, `privy:token` không có. Đã kết nối, chưa xác thực. Cả
+  năm giả thuyết trước đó đều không cần thiết.
+- **Sai ở đâu:** Mình chẩn đoán bằng cách nhìn giao diện và suy ra, trong khi thứ đang
+  hỏng là **trạng thái**, và trạng thái đó được ghi thẳng ra một chỗ đọc được. "Chưa
+  đăng nhập" trên màn hình gộp hai tình huống rất khác nhau vào cùng một hình ảnh, và
+  mình chọn phân biệt chúng bằng phỏng đoán thay vì bằng phép đọc.
+- **Luật rút ra:** Khi một luồng auth kết thúc sai trạng thái, **đọc chỗ client lưu
+  trạng thái trước khi dựng giả thuyết nào**: `localStorage`, `sessionStorage`, cookie.
+  Một lệnh `page.evaluate` liệt kê các khoá là rẻ hơn một lượt chạy lại, và nó phân biệt
+  được "chưa bao giờ kết nối" với "kết nối rồi nhưng chưa xác thực", hai thứ trông y hệt
+  nhau trên màn hình mà nguyên nhân khác hẳn.
+- **Skill đích:** `frontend-e2e-wallet`, `code-change-workflow` (mục A4: khoanh vùng
+  theo lớp)
+
+### [2026-08-17] Viết một truy vấn đúng, mà không hỏi nhà cung cấp có phục vụ nổi không
+- **Chuyện gì xảy ra:** Hai hook đọc event bằng `fromBlock: "earliest"`. Đúng về mặt ý
+  định và không nhà cung cấp miễn phí nào chịu: Alchemy trần 10 block, publicnode 50.000,
+  drpc 10.000. Trên chain local Hardhat thì `"earliest"` chạy tức thì vì cả chain chỉ vài
+  trăm block, nên code trông như đã chạy tốt suốt quá trình dev.
+- **Sai ở đâu:** Mình viết truy vấn theo thứ mình cần, rồi kiểm nó ở nơi duy nhất mà
+  giới hạn không tồn tại. `"earliest"` trên chain thật không phải một tham số, nó là một
+  yêu cầu quét vài triệu block, và đó là thứ mọi gói miễn phí đều chặn đầu tiên.
+- **Luật rút ra:** Mỗi lần viết truy vấn có **phạm vi mở** (`earliest`, `latest`, không
+  giới hạn, không phân trang), hỏi ngay: trên mạng thật, phạm vi này lớn cỡ nào, và gói
+  đang dùng cho tới đâu. Local chain là nơi tệ nhất để kiểm loại giới hạn này, vì ở đó
+  mọi phạm vi đều nhỏ. Kèm theo: đọc log lịch sử thì mặc định quét **theo cửa sổ có
+  biên, mới nhất trước**, đừng mặc định quét cả chain.
+- **Skill đích:** `vibe-code-dapp`, `dapp-production-checklist`
+
+### [2026-08-17] Truyền một hàm vào `addInitScript` trong khi chạy bằng tsx
+- **Chuyện gì xảy ra:** Mình chèn CSS vào mọi trang bằng `context.addInitScript(fn)`.
+  Trang ném `__name is not defined` trên từng document, nên CSS không bao giờ được chèn.
+  Mình mất một lượt tưởng đó là lỗi của app, vì thông báo hiện ra trong log của app.
+- **Sai ở đâu:** `tsx` biên dịch bằng esbuild, mà esbuild viết lại hàm có tên kèm helper
+  `__name`. Helper đó nằm trong scope của file mình, không nằm trong scope của trang.
+  Hàm được serialize sang trang mang theo một tham chiếu tới thứ không tồn tại ở đó.
+- **Luật rút ra:** Mọi API **serialize hàm để chạy trong ngữ cảnh khác**
+  (`addInitScript`, `page.evaluate`, `worker`, `vm`) đều nguy hiểm khi build tool có
+  chèn helper. Đang chạy dưới tsx/esbuild/ts-node thì truyền **chuỗi mã nguồn**
+  (`addInitScript({content})`) thay vì truyền hàm. Dấu hiệu nhận biết: lỗi
+  `__name is not defined` hoặc `__defProp is not defined` ở phía trang.
+- **Skill đích:** `frontend-e2e-wallet`
+
+### [2026-08-17] Suýt thiết kế quanh một trần thời gian mà chưa hỏi gói đang dùng
+- **Chuyện gì xảy ra:** User muốn agent phân xử chậm lại khoảng 5 phút để nhìn được.
+  Phản xạ đầu của mình là khai `export const maxDuration = 300` cho route. Trước khi gõ,
+  mình hỏi user đang ở gói Vercel nào. Câu trả lời là Hobby, trần cứng 60 giây. Nếu làm
+  theo phản xạ thì function bị giết ở giây 60 và tranh chấp treo lại giữa chừng, tệ hơn
+  hẳn tình trạng ban đầu.
+- **Sai ở đâu:** Chưa sai, nhưng suýt. Mình đã coi "kéo dài thời gian chạy" là một tham
+  số tự do, trong khi nó là thứ nền tảng hosting quyết định, và trần đó khác nhau theo
+  gói chứ không theo code.
+- **Luật rút ra:** Trần thời gian chạy, kích thước payload, số kết nối đồng thời là
+  **thuộc tính của gói, không phải của code**. Trước khi thiết kế bất cứ thứ gì chạy lâu
+  hơn vài giây trên serverless, hỏi gói trước. Và khi trần quá thấp, cách đúng thường là
+  **hoãn thời điểm gọi** chứ không phải kéo dài lời gọi: ở đây là để nguyên lời gọi
+  nhanh, chỉ dời lúc nó được phép chạy, và dùng chính nhịp poll sẵn có làm đồng hồ.
+- **Skill đích:** `dapp-production-checklist`, `agentic-engineering`
 
 ---
 

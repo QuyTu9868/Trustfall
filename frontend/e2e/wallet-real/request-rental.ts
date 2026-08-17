@@ -380,12 +380,26 @@ async function main() {
   // everything below it spends gas and leaves a rental on the live contract, so the half of
   // this script that needed running twenty times today is worth being able to run alone.
   if (process.env.CONNECT_ONLY) {
+    // Counted by host, because the signed-in rentals page is the only place the log scan
+    // runs and the rpc-budget suite cannot reach it: that suite browses signed out, where
+    // there are no rentals to read events for. Without this, the cost of scanning eight
+    // windows per page load would be a number nobody had ever looked at.
+    const calls = new Map<string, number>();
+    appPage.on("request", (r) => {
+      const host = new URL(r.url()).host;
+      if (host.includes("vercel.app")) return;
+      calls.set(host, (calls.get(host) ?? 0) + 1);
+    });
+
     await appPage.goto(`${SITE}/rentals`, { waitUntil: "networkidle" }).catch(() => {});
     // Long enough for the log scan to come back. It is several requests to a public node,
     // which is slower than the state reads beside it and is the thing worth looking at.
     await appPage.waitForTimeout(12_000);
     await appPage.screenshot({ path: "e2e/shots/wallet-real-rentals.png", fullPage: true });
     console.log("\nCONNECT_ONLY: signed in, nothing requested, no gas spent.");
+    for (const [host, count] of [...calls].sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${count} request(s) to ${host}`);
+    }
     console.log("Rentals page: e2e/shots/wallet-real-rentals.png");
     await context.close();
     return;
