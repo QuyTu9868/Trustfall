@@ -49,3 +49,10 @@ services/latch/console-snippet.txt
 # Playwright leftovers. Screenshots are worth keeping, traces and videos are not.
 frontend/e2e/.artifacts/
 frontend/playwright-report/
+
+# The wallet-signing script's step-by-step diagnostics: one set per run, only ever read
+# minutes after the run that wrote them. Its two outcome shots are kept.
+frontend/e2e/shots/wallet-real-p*-round*.png
+frontend/e2e/shots/wallet-real-app-after-*.png
+frontend/e2e/shots/wallet-real-attempt*.png
+frontend/e2e/shots/wallet-real-failure*.png
