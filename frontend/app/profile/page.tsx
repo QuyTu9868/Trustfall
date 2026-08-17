@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount } from "wagmi";
+import { Earnings } from "@/components/earnings";
 import { MyListings } from "@/components/my-listings";
 import { StatusStrip } from "@/components/status-strip";
 import { UnreadBadge } from "@/components/unread-badge";
@@ -119,6 +120,11 @@ export default function ProfilePage() {
               note="Deposits back, plus rent earned"
             />
           </section>
+
+          {/* Above the rental list, because somebody who lends things opens this page to
+              find out how it is going, and below the four tiles, because those are the
+              wider picture this one narrows. Renders nothing at all for a pure renter. */}
+          <Earnings figures={balances.earnings} />
 
           <section className="flex flex-col gap-4">
             <div className="flex items-baseline gap-3">
