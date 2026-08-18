@@ -10,6 +10,7 @@ import {
   isoDateToTimestamp,
   listingIdToBytes32,
 } from "@/lib/escrow";
+import { dayLabel, toRanges, useBookedDays } from "@/lib/use-booked-days";
 import { useRequestRental } from "@/lib/use-request-rental";
 
 const MAX_RENTAL_DAYS = 30; // mirrors RentalEscrow.MAX_RENTAL_DAYS
@@ -76,6 +77,22 @@ export function BookingBox({
   const invalidRange = days !== null && days < 1;
   const tooLong = days !== null && days > MAX_RENTAL_DAYS;
 
+  // Which days the contract has already given to somebody else. Checked here so a clash
+  // is a sentence on the screen rather than a reverted transaction, which arrives after
+  // the wallet popup and reads as DayNotAvailable(19604, 6) to somebody who did nothing
+  // wrong. The contract still refuses it either way; this only moves the news earlier.
+  const taken = useBookedDays(listingId, chainToday ? toUtcDay(chainToday) : null);
+  const ranges = toRanges(taken);
+
+  // The end day is excluded on purpose, matching _bookDays: it is the day the item comes
+  // back, and the next rental is allowed to start on it.
+  const clash =
+    start && end && days !== null && days > 0
+      ? Array.from({ length: days }, (_, index) => toUtcDay(start) + index).find((day) =>
+          taken.has(day)
+        )
+      : undefined;
+
   // What the booked range buys is an allowance, not a bill. The escrow holds this much,
   // and the final charge is worked out from the clock when the item comes back: a rental
   // day is 24 hours from check-in, and unused days are refunded.
@@ -86,7 +103,9 @@ export function BookingBox({
   const ownsIt =
     authenticated &&
     user?.wallet?.address?.toLowerCase() === owner.toLowerCase();
-  const canSubmit = Boolean(start && end && days && days > 0 && !tooLong && !ownsIt);
+  const canSubmit = Boolean(
+    start && end && days && days > 0 && !tooLong && !ownsIt && clash === undefined
+  );
 
   const label = !authenticated
     ? "Sign in to rent"
@@ -165,6 +184,30 @@ export function BookingBox({
       {tooLong && (
         <p className="text-xs text-stop-ink">
           {days} days. The contract caps a rental at {MAX_RENTAL_DAYS}.
+        </p>
+      )}
+      {clash !== undefined && (
+        <p className="text-xs text-stop-ink">
+          {dayLabel(clash)} is already booked. Pick dates that skip it.
+        </p>
+      )}
+
+      {/* Listed rather than drawn as a grid. Sixty cells in a panel this narrow is a
+          calendar nobody can read, and the answer somebody needs is which days to avoid,
+          which is a short sentence whenever it is a short list. */}
+      {ranges.length > 0 && (
+        <p className="text-xs text-ink-muted">
+          {/* Not tabular. That class is for columns of figures that have to line up, and
+              a date inside a sentence rendered in monospace just reads as a gap. */}
+          Already booked:{" "}
+          {ranges
+            .map((range) =>
+              range.from === range.to
+                ? dayLabel(range.from)
+                : `${dayLabel(range.from)} to ${dayLabel(range.to)}`
+            )
+            .join(", ")}
+          . A rental can start on the day another one ends.
         </p>
       )}
 
