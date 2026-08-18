@@ -1,17 +1,18 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * The seven routes nothing had ever called: faucet, appeal, price-hint, handover-photo,
- * reviews, notifications, messages/unread.
+ * The six routes nothing had ever called: appeal, price-hint, handover-photo, reviews,
+ * notifications, messages/unread. The faucet was a seventh and has since been removed;
+ * one case below holds the ground it stood on.
  *
  * No browser needed for any of this, which is why it is a separate file from pages.spec.ts:
  * these are plain HTTP requests against a JSON API, and standing up a page to make them
  * would only be slower.
  *
  * What is deliberately NOT tested here, and why: every route that requires a Privy identity
- * token is only exercised unauthenticated. Faking a valid token would mean either minting
- * real testnet USDC (faucet), signing a real verdict again (appeal on a live dispute), or
- * writing rows under an address this suite does not own. ERROR.md already has an entry for
+ * token is only exercised unauthenticated. Faking a valid token would mean either signing
+ * a real verdict again (appeal on a live dispute) or writing rows under an address this
+ * suite does not own. ERROR.md already has an entry for
  * calling a destructive route with real data on the theory that it would be refused; the
  * fix that time was to always reach for a throwaway id, and the fix here is the same idea
  * one step earlier: don't reach for a working credential when the question is just "does
@@ -21,21 +22,14 @@ import { expect, test } from "@playwright/test";
  * tests use one: the auth check runs first and 401 is 401 whether or not the id is real.
  */
 const NOWHERE = 999_999;
-const junk = () => `not-a-real-token-${Date.now()}`;
 
 test.describe("faucet", () => {
-  test("no token, refused", async ({ request }) => {
+  // The route is gone, deliberately, and this stays to say so. A test file that simply
+  // stopped mentioning the faucet would leave the next reader unable to tell a removed
+  // feature from an untested one.
+  test("is gone: nothing hands out test USDC any more", async ({ request }) => {
     const response = await request.post("/api/faucet");
-    expect(response.status()).toBe(401);
-  });
-
-  test("garbage token, refused, not a 500", async ({ request }) => {
-    const response = await request.post("/api/faucet", {
-      headers: { "privy-id-token": junk() },
-    });
-    // Whatever Privy's SDK does with a token it cannot verify, it must not be an unhandled
-    // throw: a 500 here would mean an attacker's malformed header can crash the route.
-    expect(response.status(), await response.text()).toBeLessThan(500);
+    expect(response.status()).toBe(404);
   });
 });
 

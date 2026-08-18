@@ -5,7 +5,6 @@ import { IdentityGuard } from "@/components/identity-guard";
 import { Chrome } from "@/components/site-chrome";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { UsdcTopUp } from "@/components/usdc-top-up";
 import { Providers } from "./providers";
 
 const geistSans = Geist({
@@ -76,9 +75,6 @@ export default function RootLayout({
                   screen is right there next to the warning explaining it. */}
               <IdentityGuard>{children}</IdentityGuard>
             </div>
-            {/* Outside the page, because it is about the wallet rather than about whatever
-                is on screen, and it should survive navigating between pages. */}
-            <UsdcTopUp />
           </Chrome>
         </Providers>
       </body>
