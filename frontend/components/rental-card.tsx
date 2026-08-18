@@ -1,6 +1,7 @@
 "use client";
 
 import { useIdentityToken } from "@privy-io/react-auth";
+import Link from "next/link";
 import { useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount, useConfig } from "wagmi";
@@ -19,6 +20,7 @@ import { announce } from "@/lib/announce";
 import { targetChain } from "@/lib/chain";
 import {
   USDC_DECIMALS,
+  bytes32ToListingId,
   escrowAbi,
   escrowAddress,
   type Rental,
@@ -176,6 +178,22 @@ export function RentalCard({
           )}
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* The only way back to the item from a finished rental. The card knows which
+                listing it was for and never said so, which left somebody who wanted the
+                same thing again searching for it by name.
+
+                No dates on the link, deliberately. Carrying the old ones forward would fill
+                the form with a range that has already passed, and the picker's minimum is
+                the chain's today, so the first thing it would do is reject itself. */}
+            {isRenter && rental.status === "Completed" && (
+              <Link
+                href={`/listings/${bytes32ToListingId(rental.listingId)}`}
+                className="rounded-control border border-line px-3 py-2 text-sm"
+              >
+                Rent it again
+              </Link>
+            )}
+
             {isOwner && rental.status === "Requested" && (
               <>
                 <Action
