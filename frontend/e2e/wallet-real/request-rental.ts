@@ -36,13 +36,16 @@
  * already used, against the cheapest real listing (Honda Wave, 12/20 USDC) for one day, so
  * the footprint of running this is the smallest one available rather than an arbitrary one.
  */
-import dappwright from "@tenkeylabs/dappwright";
 import type { Page } from "@playwright/test";
 import { createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { escrowAbi, listingIdToBytes32, toRental, type RentalTuple } from "../../lib/escrow";
 import deployed from "../../lib/deployed.json";
+// Shared with dispute-bar.ts. Everything about driving MetaMask and Privy was learned
+// against one build of each, and a second copy would mean the next thing learned only
+// reaches whichever file its author happened to open.
+import { boot, connectWallet } from "./wallet";
 
 /**
  * Deployed by default, overridable with SITE.
@@ -106,197 +109,6 @@ async function findListing() {
   throw new Error(`Found ${ids.length} listings, none titled "${LISTING_TITLE}".`);
 }
 
-/**
- * Clicks a popup's confirm-btn through however many screens it turns out to have, and
- * closes when the popup does.
- *
- * How many is not knowable in advance. MetaMask 13.17.0's connect flow is two screens, an
- * account picker and then "Review permissions" for the multichain networks it now bundles
- * by default (Bitcoin, Solana, Tron alongside the EVM one this app actually asked for).
- * dappwright's own approve() assumes one screen: it clicks confirm-btn once and waits for
- * the popup to close, which never happens here because a second screen with its own
- * confirm-btn has just replaced the first inside the same popup. Looping the same click
- * until the popup itself closes works for either shape without hardcoding which this
- * build shows.
- */
-// MetaMask does not use one testid for "the button that moves this screen forward". The
-// account picker and a plain message signature are confirm-btn and confirm-footer-button
-// respectively, per dappwright's own source, and that much matches what runs here. But the
-// "Review permissions" screen this MetaMask build shows for its multichain networks
-// (Bitcoin, Solana, Tron alongside the EVM chain this app actually asked for) has neither:
-// its "Confirm" button carries some other testid dappwright 2.13.12 was never taught,
-// because the multichain UI postdates it. The button's visible text is the one thing that
-// has held constant across every screen seen so far, so that is the fallback rather than a
-// third guessed testid.
-const CONFIRM_TESTIDS = ["confirm-btn", "confirm-footer-button"];
-
-/**
- * The real MetaMask popup, as opposed to a decoy with the same URL prefix.
- *
- * The first "page" event this script ever caught was a notification.html with no route
- * after it - no #/connect/..., nothing - and it sat on the loading spinner for the entire
- * length of every timeout tried, never once resolving. Manifest V3 MetaMask appears to open
- * more than one extension page around a connect request, and only the one that gets an
- * actual hash route is the interactive one; the other is not something clicking through
- * will ever finish. Polling context.pages() for a URL that already has a route sidesteps
- * the question of which "page" event fired first and picks the one actually worth clicking.
- */
-async function findRoutedPopup(
-  context: import("playwright-core").BrowserContext,
-  timeoutMs = 20_000
-) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const routed = context
-      .pages()
-      .find((p) => /notification\.html#\/./.test(p.url()) && !p.isClosed());
-    if (routed) return routed;
-    await new Promise((r) => setTimeout(r, 400));
-  }
-  return null;
-}
-
-async function clickThroughPopup(popup: Page, label: string) {
-  console.log(`  [${label}] popup url: ${popup.url()}`);
-  for (let round = 0; round < 5 && !popup.isClosed(); round++) {
-    // MetaMask's own splash (the fox and a spinner) sits on screen well past
-    // domcontentloaded while it fetches account state to show, apparently against its own
-    // default RPC rather than anything this app configures. The first version of this loop
-    // gave up after 2.5s per testid and concluded there was nothing to click, which was
-    // wrong: there was, it just had not rendered yet. One locator for either testid with a
-    // generous wait replaces two short ones, so a slow popup gets the time it needs instead
-    // of being abandoned mid-load.
-    // waitFor, not isVisible: isVisible() is an immediate, non-retrying check despite
-    // taking a timeout option, and every earlier version of this loop was using it to mean
-    // "wait up to N seconds", which it does not do. That is almost certainly why a button
-    // plainly visible in the screenshot taken a moment later kept being reported as absent.
-    // waitFor({state: "visible"}) is the one that actually polls.
-    const confirm = popup
-      .getByTestId(CONFIRM_TESTIDS[0])
-      .or(popup.getByTestId(CONFIRM_TESTIDS[1]))
-      .or(popup.getByRole("button", { name: /^confirm$/i }));
-    const ready = await confirm
-      .waitFor({ state: "visible", timeout: 12_000 })
-      .then(() => true)
-      .catch((e) => {
-        console.log(`  [${label}] locator error: ${e.message.split("\n")[0]}`);
-        return false;
-      });
-    await popup
-      .screenshot({ path: `e2e/shots/wallet-real-${label}-round${round}.png` })
-      .catch((e) => console.log(`  [${label}] screenshot failed round ${round}: ${e.message}`));
-    console.log(`  [${label}] round ${round}: ${ready ? "clicking a confirm button" : "no confirm button appeared"}`);
-    if (!ready) break;
-    // Both of these throw rather than return once the popup goes away, and the last click
-    // of a successful run is precisely the one that makes it go away. Treating that as a
-    // failure aborted the whole script at the moment it had actually just succeeded.
-    await confirm.click().catch(() => {});
-    await popup.waitForTimeout(1200).catch(() => {});
-  }
-}
-
-async function connectWallet(page: Page, context: import("playwright-core").BrowserContext) {
-  // Armed before the click, not after: a popup listener only fires for a popup that opens
-  // after the listener exists, which is the exact bug the skill's own history warns about
-  // from the two-signature approve+pay flow.
-  /**
-   * Opens Privy's modal and walks it as far as handing off to MetaMask.
-   *
-   * Called more than once on purpose. Approving MetaMask's connect leaves this app with a
-   * wallet connected and nobody signed in: privy:connections gains the address, wagmi's
-   * store gains the account, and the modal closes without ever asking for the signature
-   * that authentication actually needs. MetaMask 13.17 splits its connect across two
-   * screens, the second of which reviews permissions for chains the app never asked about,
-   * and Privy treats the end of that as the end of its own flow.
-   *
-   * A person hitting this presses the button again, and the second pass is short because
-   * the wallet is already connected: Privy goes straight to the signature. This does the
-   * same rather than pretending one pass is enough.
-   */
-  const openModal = async (attempt: number) => {
-    const label = `attempt${attempt}`;
-    await page.getByRole("button", { name: /^sign in$/i }).click();
-
-    // waitFor, never isVisible. isVisible() answers immediately about this instant and is
-    // false for a modal still animating in, so a version of this built on it silently
-    // skipped both clicks and left the flow parked on the first screen with nothing in the
-    // log to say why. The whole point of these being optional is that a later pass may
-    // open past them, and "not there yet" has to be told apart from "not there".
-    const clickIfShown = async (name: RegExp, timeout: number) => {
-      const button = page.getByRole("button", { name }).first();
-      const shown = await button
-        .waitFor({ state: "visible", timeout })
-        .then(() => true)
-        .catch(() => false);
-      if (shown) await button.click().catch(() => {});
-      return shown;
-    };
-
-    // Generous on the chooser, because on a first pass it is definitely coming and only
-    // the animation is in the way. Short on MetaMask, because a later pass can legitimately
-    // open straight past the wallet list and should not spend ten seconds finding that out.
-    await clickIfShown(/continue with a wallet/i, 15_000);
-    await clickIfShown(/metamask/i, 5_000);
-
-    await page.screenshot({ path: `e2e/shots/wallet-real-${label}.png` }).catch(() => {});
-    console.log(`  [modal] ${label}: ${await page.locator("[role='dialog']").count()} dialog(s)`);
-  };
-
-  await openModal(1);
-
-  // Privy issues more than one wallet request while it finishes signing somebody in, and
-  // not always the same number twice: a connect, a permissions review, a session signature,
-  // and in at least one run of this script a second connect that went all the way back to
-  // the account picker. Waiting for a fixed number of popups or a fixed idle gap between
-  // them both guessed wrong in practice. What actually ends is the app itself no longer
-  // showing "Sign in", so that is what this waits for, servicing whatever routed popup
-  // shows up while it waits rather than assuming the count in advance.
-  const seen = new Set<Page>();
-  const deadline = Date.now() + 150_000;
-  let sweep = 0;
-  let attempts = 1;
-  while (Date.now() < deadline) {
-    const stillSignedOut = await page
-      .getByRole("button", { name: /^sign in$/i })
-      .count();
-    if (stillSignedOut === 0) break;
-
-    // Signed out with the modal gone means the flow ended without finishing. Start it
-    // again rather than spending the rest of the deadline waiting for a popup that no
-    // longer has anything to open it.
-    const dialogs = await page.locator("[role='dialog']").count();
-    if (dialogs === 0 && attempts < 3) {
-      console.log(`  [modal] closed with nobody signed in, reopening (pass ${++attempts})`);
-      await openModal(attempts).catch((e) => console.log(`  [modal] reopen failed: ${e.message}`));
-    }
-
-    const popup = await findRoutedPopup(context, 5000);
-    if (popup && !seen.has(popup)) {
-      seen.add(popup);
-      await clickThroughPopup(popup, `p${seen.size}`);
-
-      // What the app itself did about it, photographed the moment the popup let go. A
-      // connect that MetaMask reports as finished and the app never reacts to is the exact
-      // failure this script kept hitting, and the app side of that second was the one thing
-      // never captured: every screenshot was of MetaMask, or of the page a minute later
-      // once the modal had already given up and closed.
-      await page.waitForTimeout(1500);
-      await page
-        .screenshot({ path: `e2e/shots/wallet-real-app-after-p${seen.size}.png` })
-        .catch(() => {});
-      const modal = await page.locator("#privy-dialog, [role='dialog']").count();
-      console.log(`  [app] after p${seen.size}: ${modal} dialog(s) open`);
-    }
-
-    // The Privy modal's own words, once a sweep, so a flow that is stuck waiting on
-    // something says which something rather than only failing to finish.
-    if (++sweep % 4 === 0) {
-      const dialog = page.locator("[role='dialog']").first();
-      const text = await dialog.textContent({ timeout: 1000 }).catch(() => null);
-      console.log(`  [app] modal says: ${text ? text.slice(0, 160) : "(no dialog)"}`);
-    }
-  }
-}
 
 /** Set once they exist, so a failure anywhere after that can still be screenshotted. */
 let lastPage: Page | null = null;
@@ -307,37 +119,11 @@ async function main() {
   if (!key) throw new Error("Test_2 missing. Run with --env-file=../.env.test.");
 
   console.log("Booting a real MetaMask...");
-  const [wallet, page, context] = await dappwright.bootstrap("", {
-    wallet: "metamask",
-    version: "13.17.0",
-    seed: "test test test test test test test test test test test junk",
-    headless: false,
-    showTestNets: true,
-  });
-
+  // Test nets on, unlike the dispute script: this one sends a transaction on Sepolia and
+  // MetaMask has to have the network to send it on.
+  const { wallet, context } = await boot(key, { showTestNets: true });
   lastContext = context;
 
-  // MetaMask's unread-notification dot sits on top of the account options button, and
-  // dappwright's importPK clicks that button. Once the dot reaches "9+" it is wide enough to
-  // cover the target completely, and Playwright refuses a click it can see something else
-  // would receive: thirty seconds of retries and then a timeout inside library code with
-  // nothing to do with this app. Hiding it beats clearing the notifications, which would
-  // mean driving MetaMask's own UI to fix MetaMask's own UI.
-  //
-  // An init script rather than one addStyleTag, because MetaMask navigates during onboarding
-  // and a style attached to the document it had at bootstrap does not survive that. This
-  // reapplies itself on every document in the context, popups included.
-  // As a source string, not a function. tsx compiles with esbuild, which rewrites named
-  // functions to carry a __name() helper that exists in this file's scope and not in the
-  // page's, so a function handed to addInitScript arrives referencing an undefined symbol
-  // and throws "__name is not defined" on every document instead of running.
-  const HIDE_DOT = ".notifications-tag-counter__unread-dot{display:none !important}";
-  await context.addInitScript({
-    content: `(function(){var add=function(){var s=document.createElement("style");s.textContent=${JSON.stringify(HIDE_DOT)};document.head.appendChild(s)};if(document.head){add()}else{document.addEventListener("DOMContentLoaded",add)}})()`,
-  });
-  await page.addStyleTag({ content: HIDE_DOT }).catch(() => {});
-
-  await wallet.importPK(key);
   // Derived rather than read off the screen: the header shows a truncated 0x7d2a...0798,
   // which is not something to compare a contract field against.
   const renter = privateKeyToAccount(
