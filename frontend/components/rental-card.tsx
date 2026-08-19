@@ -89,6 +89,17 @@ export function RentalCard({
   const settled = rental.status === "Returned" || rental.status === "Completed";
   const settlement = useSettlement(rental.id, settled);
 
+  // What the escrow is holding at this moment, mirroring RentalEscrow rather than the
+  // amounts the rental was set up with. Rent is settled on the way out of Active, by
+  // checkOut, by openDispute from Active, or by finalize. The deposit survives one state
+  // longer and leaves on the verdict or on finalize. Completed and Cancelled hold nothing.
+  const holdsRent =
+    rental.status === "Requested" ||
+    rental.status === "Approved" ||
+    rental.status === "Active";
+  const holdsDeposit =
+    holdsRent || rental.status === "Returned" || rental.status === "Disputed";
+
   // From Returned the clock runs from the confirmed return. From Active nobody confirmed
   // anything, so it runs from the day the booking ended.
   const releaseAt =
@@ -147,10 +158,20 @@ export function RentalCard({
             {day(rental.startDate)} to {day(rental.endDate)}
           </span>
         </div>
+        {/* "held" only while the contract is actually holding it.
+
+            Rent leaves escrow the moment a rental stops being Active: at check-out, or at
+            the dispute if one is opened first. So from Returned onwards this line was
+            naming money the contract had already paid out, and on a Completed rental it
+            claimed to be holding everything while the breakdown directly underneath said
+            what had really been charged and refunded. The deposit outlasts it by one
+            state, and goes on the same rule. */}
         <div className="text-right text-sm">
-          <div className="tabular">{money(rental.rent)} USDC held</div>
+          <div className="tabular">
+            {money(rental.rent)} USDC {holdsRent ? "held" : "rent"}
+          </div>
           <div className="tabular text-xs text-ink-muted">
-            {money(rental.deposit)} USDC deposit
+            {money(rental.deposit)} USDC deposit{holdsDeposit ? ", held" : ""}
           </div>
         </div>
       </div>
