@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
 import { endAdminSession, hasAdminSession, startAdminSession } from "@/lib/admin-session";
+import { readRental } from "@/lib/rental-server";
 import { readSettlement } from "@/lib/settlement";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "@/lib/supabase-server";
 import { verifyCode } from "@/lib/totp";
@@ -153,9 +154,17 @@ async function one(rentalId: number) {
   // nothing to read and nothing to show, which is itself the honest answer.
   const settled = verdict.signed && verdict.tx_hash ? await readSettlement(verdict.tx_hash) : null;
 
+  // Who the two sides are, read off the chain rather than from the filings. A side that
+  // never filed has no row to take an address from, and that is exactly the case where a
+  // reader most wants to know who failed to answer.
+  const parties = await readRental(BigInt(rentalId))
+    .then((rental) => ({ owner: rental.owner, renter: rental.renter }))
+    .catch(() => null);
+
   return NextResponse.json({
     verdict,
     settled,
+    parties,
     evidence: (evidence ?? []).map((entry) => ({
       side: entry.side,
       statement: entry.statement,

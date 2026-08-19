@@ -48,7 +48,16 @@ const OUTCOME: Record<Ruling["verdict"], string> = {
  * There is no button here that runs the arbitrator. It runs when both sides have filed,
  * or when the first has waited a day: whoever expects to lose would never press it.
  */
-export function DisputeBox({ rentalId }: { rentalId: bigint }) {
+export function DisputeBox({
+  rentalId,
+  owner,
+  renter,
+}: {
+  rentalId: bigint;
+  /** Both addresses, passed in rather than fetched: the card already read them off the chain. */
+  owner: string;
+  renter: string;
+}) {
   const { identityToken } = useIdentityToken();
 
   const [mine, setMine] = useState<"owner" | "renter" | null>(null);
@@ -229,26 +238,30 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
         </p>
       </div>
 
-      {/* Both sides see both filings, photographs included. Somebody who cannot see what
+      {/* The two accounts side by side, because they are answers to the same question and
+          reading one after the other buries the disagreement between them.
+
+          No conversation in here. The Messages button above already opens it and it belongs
+          to the whole rental rather than to the argument, so putting a second copy in the
+          middle would mean the same thread on screen twice. The place everything sits
+          together is /admin, where somebody is auditing rather than taking part.
+
+          Both sides see both filings, photographs included. Somebody who cannot see what
           was filed against them has no way to judge whether the ruling was reasonable. */}
-      {filed?.map((entry) => (
-        <div key={entry.side} className="flex flex-col gap-2 rounded-card border border-line bg-surface p-3">
-          <span className="text-xs text-ink-muted">
-            The {entry.side} said, {new Date(entry.created_at).toLocaleString()}
-          </span>
-          <p className="text-sm whitespace-pre-wrap break-words">{entry.statement}</p>
-          {entry.image_url && (
-            /* object-contain, because a handover photo cropped to a square can hide the
-               very damage it was filed to show. */
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={entry.image_url}
-              alt={`Filed by the ${entry.side}`}
-              className="max-h-72 w-full rounded-card object-contain"
-            />
-          )}
-        </div>
-      ))}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Filed
+          side="renter"
+          address={renter}
+          entry={filed?.find((e) => e.side === "renter")}
+          isMine={mine === "renter"}
+        />
+        <Filed
+          side="owner"
+          address={owner}
+          entry={filed?.find((e) => e.side === "owner")}
+          isMine={mine === "owner"}
+        />
+      </div>
 
       {!alreadyFiled && stillOpen && (
         <div className="flex flex-col gap-2">
@@ -442,5 +455,64 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
 
       {error && <p className="text-xs text-stop-ink">{error}</p>}
     </section>
+  );
+}
+
+/**
+ * One side's account of what happened, headed by who they are.
+ *
+ * The role and the wallet both, and the wallet in full rather than truncated. A dispute is
+ * the one screen where somebody may want to check an address against the chain, and a
+ * shortened one cannot be checked against anything.
+ *
+ * Renders even with nothing in it. An empty column says the other side has not answered
+ * yet, which is a fact worth seeing: it is the difference between being argued with and
+ * being ignored, and after a day of it the arbitrator rules on one account alone.
+ */
+function Filed({
+  side,
+  address,
+  entry,
+  isMine,
+}: {
+  side: "owner" | "renter";
+  address: string;
+  entry?: Filed;
+  isMine: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-card border border-line bg-surface p-3">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs tracking-wide text-ink-muted uppercase">
+          The {side}
+          {isMine ? " (you)" : ""}
+        </span>
+        <span className="tabular text-[11px] break-all text-ink-muted">{address}</span>
+      </div>
+
+      {entry ? (
+        <>
+          <span className="text-[11px] text-ink-muted">
+            Filed {new Date(entry.created_at).toLocaleString()}
+          </span>
+          <p className="text-sm whitespace-pre-wrap break-words">{entry.statement}</p>
+          {entry.image_url && (
+            /* object-contain, because a handover photo cropped to a square can hide the
+               very damage it was filed to show. */
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={entry.image_url}
+              alt={`Filed by the ${side}`}
+              className="max-h-72 w-full rounded-card object-contain"
+            />
+          )}
+        </>
+      ) : (
+        <p className="text-xs text-ink-muted">
+          Nothing filed yet. If this side says nothing for a day, the arbitrator rules on
+          what it has.
+        </p>
+      )}
+    </div>
   );
 }

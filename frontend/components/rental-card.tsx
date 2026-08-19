@@ -383,7 +383,7 @@ export function RentalCard({
           ruling and where the deposit went rather than losing it the moment status
           changes. */}
       {(rental.status === "Disputed" || rental.disputedAt > 0n) && (
-        <DisputeBox rentalId={rental.id} />
+        <DisputeBox rentalId={rental.id} owner={rental.owner} renter={rental.renter} />
       )}
 
       {chatOpen && <ChatThread rentalId={rental.id} />}

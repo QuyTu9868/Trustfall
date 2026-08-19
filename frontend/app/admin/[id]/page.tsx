@@ -20,6 +20,8 @@ type Detail = {
   handover: Handover[];
   chat: ChatLine[];
   settled: Settled;
+  /** Read off the chain by the route, so a side that filed nothing still has an address. */
+  parties: Parties;
 };
 
 /**
@@ -123,7 +125,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
     );
   }
 
-  const { verdict, evidence, handover, chat, settled } = detail;
+  const { verdict, evidence, handover, chat, settled, parties } = detail;
 
   return (
     <main className="flex max-w-4xl flex-col gap-8">
@@ -212,34 +214,54 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xl">What each side filed</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {evidence.map((filed) => (
-            <article
-              key={filed.side}
-              className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4"
-            >
-              <span className="text-xs text-ink-muted">
-                The {filed.side}, {new Date(filed.created_at).toLocaleString()}
-              </span>
-              <p className="text-sm whitespace-pre-wrap break-words">{filed.statement}</p>
-              {filed.image_url ? (
-                /* object-contain, because a handover photo cropped square can hide the very
-                   damage it was filed to show. */
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={filed.image_url}
-                  alt={`Filed by the ${filed.side}`}
-                  className="max-h-80 w-full rounded-card object-contain"
-                />
-              ) : (
-                <span className="text-xs text-ink-muted">No photograph filed.</span>
-              )}
-            </article>
-          ))}
-          {evidence.length === 0 && (
-            <p className="text-sm text-ink-muted">Nothing was filed by either side.</p>
-          )}
+        <h2 className="text-xl">The argument, side by side</h2>
+        <p className="text-sm text-ink-muted">
+          What each of them filed, with the conversation they had during the rental between
+          the two. Everything the arbitrator was given, in one place, which is what this page
+          is for and what the parties' own screens deliberately do not do.
+        </p>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Filing
+            side="renter"
+            address={parties?.renter}
+            entry={evidence.find((e) => e.side === "renter")}
+          />
+
+          <article className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
+            <span className="text-xs tracking-wide text-ink-muted uppercase">
+              What they said to each other
+            </span>
+            {chat.length === 0 ? (
+              <p className="text-sm text-ink-muted">They did not talk during the rental.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {chat.map((line, index) => (
+                  <div key={index} className="flex flex-col gap-1 border-b border-line pb-2 last:border-0">
+                    {/* Named by role now, which used to be a guess. The chat table stores an
+                        address and the evidence table stores a side, and lining those two up
+                        was not something this page would do. The rental itself is read off
+                        the chain now, so who is who is a fact rather than an inference, and
+                        the address stays beside it for checking. */}
+                    <span className="text-[11px] text-ink-muted">
+                      {whose(line.sender_address, parties)} ·{" "}
+                      {new Date(line.created_at).toLocaleString()}
+                    </span>
+                    <span className="tabular text-[10px] break-all text-ink-muted">
+                      {line.sender_address}
+                    </span>
+                    <span className="text-sm break-words">{line.body}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <Filing
+            side="owner"
+            address={parties?.owner}
+            entry={evidence.find((e) => e.side === "owner")}
+          />
         </div>
       </section>
 
@@ -286,33 +308,74 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
         </div>
       </section>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-xl">What they said during the rental</h2>
-        {chat.length === 0 ? (
-          <p className="text-sm text-ink-muted">They did not talk during the rental.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {/* Addressed by wallet rather than by role. The chat table stores an address and
-                the evidence table stores a role, and lining the two up to tint the bubbles
-                would be a guess dressed up as a fact on the one page that exists to be
-                checked. The address is printed instead. */}
-            {chat.map((line, index) => (
-              <div
-                key={index}
-                className="flex flex-col gap-1 rounded-card border border-line bg-surface p-3"
-              >
-                <span className="tabular text-[11px] text-ink-muted">
-                  {line.sender_address} · {new Date(line.created_at).toLocaleString()}
-                </span>
-                <span className="text-sm break-words">{line.body}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
       <AdminRecordActions rentalId={verdict.onchain_rental_id} label={`rental #${verdict.onchain_rental_id}`} />
     </main>
+  );
+}
+
+type Parties = { owner: string; renter: string } | null;
+
+/** Which side sent a line, by address, or nothing rather than a guess. */
+function whose(sender: string, parties: Parties) {
+  if (!parties) return "Somebody";
+  const at = sender.toLowerCase();
+  if (at === parties.renter.toLowerCase()) return "The renter";
+  if (at === parties.owner.toLowerCase()) return "The owner";
+  return "Somebody else";
+}
+
+/**
+ * One side's filing, headed by who they are.
+ *
+ * Rendered even when they filed nothing. A blank column is the record saying this person
+ * did not answer, which is a thing the ruling may well have turned on, and a section that
+ * simply omitted them would read as though only one side was ever asked.
+ */
+function Filing({
+  side,
+  address,
+  entry,
+}: {
+  side: "owner" | "renter";
+  address?: string;
+  entry?: Filed;
+}) {
+  return (
+    <article className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs tracking-wide text-ink-muted uppercase">The {side}</span>
+        {/* In full. This is a page for checking things against the chain, and a truncated
+            address cannot be checked against anything. */}
+        <span className="tabular text-[10px] break-all text-ink-muted">
+          {address ?? "address could not be read from the chain"}
+        </span>
+      </div>
+
+      {entry ? (
+        <>
+          <span className="text-[11px] text-ink-muted">
+            Filed {new Date(entry.created_at).toLocaleString()}
+          </span>
+          <p className="text-sm whitespace-pre-wrap break-words">{entry.statement}</p>
+          {entry.image_url ? (
+            /* object-contain, because a handover photo cropped square can hide the very
+               damage it was filed to show. */
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={entry.image_url}
+              alt={`Filed by the ${side}`}
+              className="max-h-80 w-full rounded-card object-contain"
+            />
+          ) : (
+            <span className="text-xs text-ink-muted">No photograph filed.</span>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-ink-muted">
+          Filed nothing. The arbitrator ruled without this side's account of it.
+        </p>
+      )}
+    </article>
   );
 }
 
