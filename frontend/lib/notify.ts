@@ -3,6 +3,36 @@ import type { OnChainRental } from "./rental-server";
 import { getSupabaseAdmin } from "./supabase-server";
 
 /**
+ * Writes one notification, once.
+ *
+ * Insert, not upsert, and that is the whole reason this function exists.
+ *
+ * Every one of these used to call .upsert() with onConflict naming the columns of the
+ * unique index. Both indexes are PARTIAL: `where onchain_rental_id is not null`, so that
+ * rows about a listing, which have a null rental id, do not all collide with each other.
+ * Postgres will not infer a partial index from a bare ON CONFLICT (cols); the statement has
+ * to repeat the index predicate, and the Supabase client has no way to send one. So every
+ * write returned "there is no unique or exclusion constraint matching the ON CONFLICT
+ * specification", and every caller logged that to a console nobody reads and carried on.
+ *
+ * The table had zero rows in it. The bell had never once rung, for any event, since it was
+ * built. Nothing in the app said so, because an empty inbox looks exactly like an inbox
+ * with nothing in it.
+ *
+ * 23505 is the unique index doing its job: this person has already been told this thing
+ * about this rental. That is a success, not a failure, and the reason upsert was reached
+ * for in the first place was only to re-mark such a row unread, which is not worth a
+ * mechanism that does not work.
+ */
+async function write(row: Record<string, unknown>, what: string) {
+  const { error } = await getSupabaseAdmin().from("notifications").insert(row);
+  if (error && error.code !== "23505") {
+    console.error(`Could not write the ${what} notification:`, error.message);
+  }
+  return !error;
+}
+
+/**
  * Tells one person that something happened on a rental.
  *
  * The wording lives here rather than in the request body on purpose. A client that could
@@ -16,7 +46,11 @@ export type NotificationKind =
   | "cancelled"
   | "checked-in"
   | "checked-out"
-  | "completed";
+  | "completed"
+  | "disputed"
+  | "dispute-filed"
+  | "appealed"
+  | "reviewed";
 
 /**
  * What each kind says.
@@ -32,6 +66,15 @@ const WORDING: Record<NotificationKind, string> = {
   "checked-in": "The item was collected. The rental clock is running.",
   "checked-out": "The item came back. The deposit is released after 3 days.",
   completed: "The rental is finished and the deposit has been returned.",
+  // The deadline is the message. Somebody who reads this a day late has already lost the
+  // chance to answer, and the arbitrator will have ruled on one account of what happened.
+  disputed:
+    "The other side has opened a dispute. File your account within a day, or the arbitrator rules on theirs alone.",
+  "dispute-filed":
+    "The other side has filed their account. Yours goes to the arbitrator with it, and it rules once both are in.",
+  appealed:
+    "The other side has appealed the ruling. If the deposit has not moved, the arbitrator reads the dispute again.",
+  reviewed: "Somebody left you a review for this rental.",
 };
 
 export async function notify(
@@ -39,12 +82,7 @@ export async function notify(
   kind: NotificationKind,
   rental: OnChainRental
 ) {
-  const supabase = getSupabaseAdmin();
-
-  // Upsert rather than insert. This is called from the browser once a transaction
-  // confirms, and a refresh or a retry would otherwise leave the same news in the bell
-  // several times over. A repeat updates the row and marks it unread again.
-  const { error } = await supabase.from("notifications").upsert(
+  await write(
     {
       recipient_address: recipient,
       kind,
@@ -53,9 +91,8 @@ export async function notify(
       is_read: false,
       created_at: new Date().toISOString(),
     },
-    { onConflict: "recipient_address,kind,onchain_rental_id" }
+    kind
   );
-  if (error) console.error("Could not write the notification:", error.message);
 }
 
 /**
@@ -97,7 +134,7 @@ export async function notifyHandoverPhoto(
     ? `A photograph of the item as it ${when}, with a note: "${note}"`
     : `A photograph of the item as it ${when}.`;
 
-  const { error } = await getSupabaseAdmin().from("notifications").upsert(
+  await write(
     {
       recipient_address: recipient,
       kind: `handover-${phase}`,
@@ -106,13 +143,67 @@ export async function notifyHandoverPhoto(
       is_read: false,
       created_at: new Date().toISOString(),
     },
-    { onConflict: "recipient_address,kind,onchain_rental_id" }
+    "handover"
   );
-  if (error) console.error("Could not write the handover notification:", error.message);
+}
+
+/** What each outcome did to the deposit, in the words somebody losing would read. */
+const OUTCOME: Record<"refund_renter" | "split" | "pay_owner", string> = {
+  refund_renter: "the whole deposit goes back to the renter",
+  split: "the deposit is split down the middle",
+  pay_owner: "the owner keeps the deposit",
+};
+
+/**
+ * Tells both sides how their dispute ended, or that it has not.
+ *
+ * Its own function because the body carries the outcome, and because this is the one
+ * notification in the app that nobody's browser can send. The arbitrator runs on the
+ * server, minutes after the last person touched the page, and often while neither party
+ * has the app open at all. Without this the ruling is a thing you find by going to look.
+ *
+ * Both parties, not just the loser. Somebody who won still has to know the money moved,
+ * and telling only one side would make the bell a signal that you lost.
+ *
+ * A held back ruling is the more important of the two to send. Nothing moved, the deposit
+ * is still sitting in the contract, and there is something the reader can actually do
+ * about it. That is the state most worth interrupting somebody for.
+ */
+export async function notifyRuling(
+  parties: string[],
+  rentalId: bigint,
+  ruling: {
+    verdict: "refund_renter" | "split" | "pay_owner";
+    signed: boolean;
+    heldBack: string | null;
+  }
+) {
+  const body = ruling.signed
+    ? `Rental #${rentalId}. The arbitrator ruled: ${OUTCOME[ruling.verdict]}. The contract has moved it.`
+    : `Rental #${rentalId}. The arbitrator ruled, and the server did not act on it. ${
+        ruling.heldBack ?? ""
+      } Nothing has moved. You can appeal with something it did not have, and seven days after the dispute opened anyone can close it, which returns the deposit to the renter.`.trim();
+
+  for (const recipient of new Set(parties.map((p) => p.toLowerCase()))) {
+    await write(
+      {
+        recipient_address: recipient,
+        // Two kinds, not one: the unique index is (recipient, kind, rental), so a ruling
+        // that was held back and later applied would otherwise be refused as a duplicate
+        // and the second, truer piece of news would never arrive.
+        kind: ruling.signed ? "dispute-resolved" : "dispute-held",
+        onchain_rental_id: Number(rentalId),
+        body,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      },
+      "ruling"
+    );
+  }
 }
 
 export async function notifyListingCheckFailed(owner: string, listingId: string, title: string) {
-  const { error } = await getSupabaseAdmin().from("notifications").upsert(
+  await write(
     {
       recipient_address: owner,
       kind: "listing-check-failed",
@@ -121,9 +212,8 @@ export async function notifyListingCheckFailed(owner: string, listingId: string,
       is_read: false,
       created_at: new Date().toISOString(),
     },
-    { onConflict: "recipient_address,kind,listing_id" }
+    "listing check"
   );
-  if (error) console.error("Could not write the listing notification:", error.message);
 }
 
 export async function notifyListingVerdict(
@@ -137,7 +227,7 @@ export async function notifyListingVerdict(
     ? `"${title}" passed the check and is live.`
     : `"${title}" was not accepted. ${verdict.reasons.join(" ")}`;
 
-  const { error } = await getSupabaseAdmin().from("notifications").upsert(
+  await write(
     {
       recipient_address: owner,
       kind: approved ? "listing-approved" : "listing-rejected",
@@ -146,7 +236,6 @@ export async function notifyListingVerdict(
       is_read: false,
       created_at: new Date().toISOString(),
     },
-    { onConflict: "recipient_address,kind,listing_id" }
+    "listing verdict"
   );
-  if (error) console.error("Could not write the listing notification:", error.message);
 }

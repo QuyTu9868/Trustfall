@@ -17,14 +17,29 @@ import { getSupabaseAdmin } from "@/lib/supabase-server";
  * The recipient is derived here too, never sent. The person who caused an event does not
  * need telling about it, so who gets the notice follows from the event itself.
  */
-const EVENTS: Record<NotificationKind, { requires: Status; to: "owner" | "renter" | "other" }> = {
+/**
+ * Partial on purpose, and it is the allowlist.
+ *
+ * A kind that is not in here cannot be posted from a browser at all. The dispute filings,
+ * appeals, reviews and rulings are written by the server at the moment it does the thing,
+ * from the route that just did it. A browser claiming one of those is claiming something
+ * no status check could verify, so the answer is that it is simply not a kind you can post.
+ */
+const EVENTS: Partial<
+  Record<NotificationKind, { requires: Status; to: "owner" | "renter" | "other" }>
+> = {
   requested: { requires: "Requested", to: "owner" },
   approved: { requires: "Approved", to: "renter" },
   cancelled: { requires: "Cancelled", to: "other" },
   "checked-in": { requires: "Active", to: "owner" },
   "checked-out": { requires: "Returned", to: "renter" },
   completed: { requires: "Completed", to: "other" },
+  // Opening a dispute is a transaction and nothing else: no server route sees it happen,
+  // so this is the only path that can tell the other side. The status check does the same
+  // work it does for the rest, refusing the notice unless the chain really is Disputed.
+  disputed: { requires: "Disputed", to: "other" },
 };
+
 
 export async function POST(request: Request) {
   try {

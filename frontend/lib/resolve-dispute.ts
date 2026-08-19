@@ -3,6 +3,7 @@ import { arbitrate } from "./arbitrate";
 import { NotSigned } from "./agent-signer";
 import { Blocked, propose } from "./agent-gateway";
 import { bytes32ToListingId } from "./escrow";
+import { notifyRuling } from "./notify";
 import { readRental } from "./rental-server";
 import { DISPUTE_EVIDENCE_BUCKET, getSupabaseAdmin } from "./supabase-server";
 
@@ -192,6 +193,21 @@ export async function resolveDispute(rentalId: bigint) {
     } else {
       throw error;
     }
+  }
+
+  // Both sides, whatever the answer was. This is the one notification no browser can send:
+  // the arbitrator runs here, minutes after the last person touched the page, and usually
+  // while neither of them has the app open. Written after the verdict is recorded and
+  // never allowed to fail the call: a ruling that stands is not undone by a bell that
+  // could not be rung.
+  try {
+    await notifyRuling([rental.owner, rental.renter], rentalId, {
+      verdict: verdict.verdict,
+      signed,
+      heldBack,
+    });
+  } catch (error) {
+    console.error("Could not tell the parties about the ruling:", error);
   }
 
   return { ...verdict, signed, txHash, heldBack };

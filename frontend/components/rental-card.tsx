@@ -36,6 +36,7 @@ const TOLD = {
   approveRental: "approved",
   cancel: "cancelled",
   finalize: "completed",
+  openDispute: "disputed",
 } as const;
 
 /** Mirrors RentalEscrow.DISPUTE_WINDOW. */
@@ -127,12 +128,13 @@ export function RentalCard({
         hash,
         chainId: targetChain.id,
       });
-      // After the receipt, so the server sees the status the notification claims. Opening
-      // a dispute has no notice of its own: the other side finds out from the box that
-      // appears on the rental, which is also the only place they can answer it.
-      if (fn !== "openDispute") {
-        await announce(rental.id, TOLD[fn], identityToken ?? undefined);
-      }
+      // After the receipt, so the server sees the status the notification claims.
+      //
+      // Opening a dispute used to be left out of this, on the reasoning that the other
+      // side would find the box when they next opened the rental. They have a day to
+      // answer before the arbitrator rules on one account alone, and "when they next
+      // open it" is not a guarantee that fits inside a day.
+      await announce(rental.id, TOLD[fn], identityToken ?? undefined);
       onChanged();
     } catch (cause) {
       const err = cause as { name?: string; shortMessage?: string };

@@ -19,7 +19,8 @@ export type Announcement =
   | "cancelled"
   | "checked-in"
   | "checked-out"
-  | "completed";
+  | "completed"
+  | "disputed";
 
 export async function announce(rentalId: bigint, kind: Announcement, identityToken?: string) {
   try {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { RentalError, readRentalAsParty } from "@/lib/rental-server";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
@@ -50,6 +51,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You already reviewed this rental." }, { status: 409 });
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Reviews are two way and neither side sees the other's until both are in, so without
+    // this the first person to write one is waiting on something they cannot see coming.
+    if (counterparty !== reviewer) await notify(counterparty, "reviewed", rental);
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {

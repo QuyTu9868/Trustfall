@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { readRentalAsParty } from "@/lib/rental-server";
 import { resolveDispute } from "@/lib/resolve-dispute";
@@ -67,6 +68,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You have already appealed once." }, { status: 409 });
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Told before the re-judging below, not after. If the arbitrator does change its mind
+    // the other side gets a second notification saying so, and knowing an appeal was made
+    // is worth having either way.
+    const other = caller === rental.owner ? rental.renter : rental.owner;
+    if (other !== caller) await notify(other, "appealed", rental);
 
     if (settled) {
       return NextResponse.json({

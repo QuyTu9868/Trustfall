@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { errorResponse } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import { AuthError, readIdentityToken, walletFromIdentityToken } from "@/lib/privy-server";
 import { RentalError, readRentalAsParty } from "@/lib/rental-server";
 import { resolveDispute } from "@/lib/resolve-dispute";
@@ -191,6 +192,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You already filed on this rental." }, { status: 409 });
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // The other side, worked out from the chain rather than from the request. Somebody
+    // whose deposit is being argued over has a day to answer, and a day is not long enough
+    // to wait for them to think of opening the app.
+    const other = caller === rental.owner ? rental.renter : rental.owner;
+    if (other !== caller) await notify(other, "dispute-filed", rental);
 
     // Judged after the answer goes out, for the same reason publishing is. A measured call
     // took sixty four seconds while the model was busy, and the person waiting had already
