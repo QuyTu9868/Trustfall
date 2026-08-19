@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { useConfig } from "wagmi";
 import { readContract, signTypedData } from "wagmi/actions";
 import { targetChain } from "@/lib/chain";
+import { explainRevert } from "@/lib/contract-errors";
 import { escrowAbi, escrowAddress } from "@/lib/escrow";
 import { useChainNowSeconds } from "@/lib/use-chain-clock";
 import {
@@ -84,9 +85,10 @@ export function ShowHandoverCode({
       );
       setExpiresAt(Number(deadline));
     } catch (cause) {
-      setError(
-        (cause as { shortMessage?: string })?.shortMessage ?? "Could not sign the code."
-      );
+      // A signature, so there are no reverts to decode here. What this buys is the
+      // rejection: declining a wallet prompt is a decision, and it was being reported back
+      // as though signing had failed.
+      setError(explainRevert(cause, "Could not sign the code."));
     } finally {
       setSigning(false);
     }

@@ -136,9 +136,11 @@ export function BookingBox({
       total: parseUnits(String(pricePerDay * days + deposit), USDC_DECIMALS),
     });
 
-    // Straight to the rentals page: the request now exists on chain and the next move
-    // belongs to the owner, so there is nothing more to do on this screen.
-    if (id !== null) router.push("/rentals");
+    // To the rental itself, not to the index. /rentals is a redirect to /profile, so
+    // pushing it landed somebody who had just signed a transaction on a page listing
+    // everything they have ever rented, with no sign of the thing they had come from and
+    // no clue which row was it. The id is already here, returned by the request.
+    if (id !== null) router.push(`/rentals/${id}`);
   }
 
   return (

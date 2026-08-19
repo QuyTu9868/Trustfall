@@ -12,6 +12,7 @@ import {
 } from "wagmi/actions";
 import { announce } from "./announce";
 import { targetChain } from "./chain";
+import { explainRevert } from "./contract-errors";
 import { escrowAbi, escrowAddress, usdcAbi, usdcAddress } from "./escrow";
 import { useNetworkReady } from "./use-network-ready";
 
@@ -190,14 +191,18 @@ export function useRequestRental() {
 }
 
 /**
- * viem puts a one line summary on shortMessage and a wall of hex on message. A rejection
- * gets its own wording, because the default reads like something went wrong.
+ * A revert written out where one is recognised, viem's own summary where it is not.
+ *
+ * Requesting can revert on dates that do not make a rental, a booking over thirty days, or
+ * asking to rent your own thing, and each of those has a sentence in contract-errors.ts.
+ * The first line of message stays as the last resort: it catches the failures that are not
+ * reverts at all, like a node refusing the call.
  */
 function readableError(cause: unknown) {
+  const written = explainRevert(cause, "");
+  if (written) return written === "You cancelled it." ? "You cancelled the signature." : written;
   if (typeof cause === "object" && cause !== null) {
-    const err = cause as { name?: string; shortMessage?: string; message?: string };
-    if (err.name === "UserRejectedRequestError") return "You cancelled the signature.";
-    if (err.shortMessage) return err.shortMessage;
+    const err = cause as { message?: string };
     if (err.message) return err.message.split("\n")[0];
   }
   return "Could not send the request.";

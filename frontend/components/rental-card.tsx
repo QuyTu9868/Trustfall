@@ -18,6 +18,7 @@ import { StatusStrip } from "@/components/status-strip";
 import { UnreadBadge } from "@/components/unread-badge";
 import { announce } from "@/lib/announce";
 import { targetChain } from "@/lib/chain";
+import { explainRevert } from "@/lib/contract-errors";
 import {
   USDC_DECIMALS,
   bytes32ToListingId,
@@ -137,12 +138,7 @@ export function RentalCard({
       await announce(rental.id, TOLD[fn], identityToken ?? undefined);
       onChanged();
     } catch (cause) {
-      const err = cause as { name?: string; shortMessage?: string };
-      setError(
-        err.name === "UserRejectedRequestError"
-          ? "You cancelled it."
-          : (err.shortMessage ?? "That did not go through."),
-      );
+      setError(explainRevert(cause, "That did not go through."));
     } finally {
       setBusy(null);
     }

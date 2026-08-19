@@ -227,7 +227,10 @@ async function main() {
   // The component itself redirects to /rentals once the id comes back, which is the
   // outcome actually worth asserting: not that a hash exists, but that the app's own logic
   // believed the request went through.
-  await appPage.waitForURL(/\/rentals/, { timeout: 60_000 });
+  // A rental, not the index. /rentals redirects to /profile, so the looser pattern this
+  // used to carry passed happily while somebody who had just signed a transaction was
+  // being dropped on a list of everything they had ever rented.
+  await appPage.waitForURL(/\/rentals\/\d+/, { timeout: 60_000 });
   await appPage.waitForLoadState("networkidle").catch(() => {});
   await appPage.screenshot({ path: "e2e/shots/wallet-real-success.png" });
 

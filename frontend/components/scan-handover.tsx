@@ -6,6 +6,7 @@ import { useConfig } from "wagmi";
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { announce } from "@/lib/announce";
 import { targetChain } from "@/lib/chain";
+import { explainRevert } from "@/lib/contract-errors";
 import { escrowAbi, escrowAddress } from "@/lib/escrow";
 import { type HandoverAction, decodeHandover } from "@/lib/handover";
 import { useNetworkReady } from "@/lib/use-network-ready";
@@ -80,12 +81,9 @@ export function ScanHandover({
       );
       onDone();
     } catch (cause) {
-      const err = cause as { name?: string; shortMessage?: string };
-      setError(
-        err.name === "UserRejectedRequestError"
-          ? "You cancelled it."
-          : (err.shortMessage ?? "That code was rejected.")
-      );
+      // The two reverts this screen actually produces, SignatureExpired and BadSignature,
+      // both mean "get a fresh code", and neither said so before.
+      setError(explainRevert(cause, "That code was rejected."));
     } finally {
       setStatus("idle");
     }
