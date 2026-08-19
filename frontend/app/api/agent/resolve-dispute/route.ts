@@ -77,7 +77,39 @@ export async function POST(request: Request) {
     let txHash: string | null = null;
     let heldBack: string | null = null;
 
-    if (confidence < MIN_CONFIDENCE) {
+    /**
+     * The second bar, and unlike the first it is not about how sure the agent says it is.
+     *
+     * pay_owner is the finding that the renter returned the item worse than they got it.
+     * The evidence for that is a photograph of it coming back, and if nobody took one then
+     * no amount of confidence can supply it. This is checked here, against the server's own
+     * table, because evidenceSeen in the body is a sentence the agent wrote about itself.
+     *
+     * A real ruling went the other way for want of this. The renter photographed a smashed
+     * headlight at collection and wrote that it was already broken; there was no check-out
+     * photograph at all; the agent read the check-in picture as proof of damage rather than
+     * as the baseline it is, and took the whole deposit at confidence 1.00. Both existing
+     * bars passed it: the gateway wants 0.9 for pay_owner and the server wants 0.6. Neither
+     * catches a model that is confidently wrong, which is what this is for.
+     *
+     * Only pay_owner. A dispute opened while the item is still out has no check-out to
+     * photograph by definition, and blocking split as well would push every one of those
+     * to the timeout.
+     */
+    let missingCheckOut = false;
+    if (body.verdict === "pay_owner") {
+      const { data: photos } = await getSupabaseAdmin()
+        .from("handover_photos")
+        .select("phase")
+        .eq("onchain_rental_id", Number(rentalId))
+        .eq("phase", "checkout");
+      missingCheckOut = !photos?.length;
+    }
+
+    if (missingCheckOut) {
+      heldBack =
+        "Nobody photographed the item coming back, so there is no evidence of the condition it was returned in. A ruling that the renter damaged it cannot rest on that, whatever the arbitrator's confidence. Somebody has to decide this one.";
+    } else if (confidence < MIN_CONFIDENCE) {
       heldBack = `Confidence ${confidence.toFixed(2)} is below ${MIN_CONFIDENCE}, so nothing was signed.`;
     } else {
       try {

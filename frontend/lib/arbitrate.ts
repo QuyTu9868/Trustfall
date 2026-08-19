@@ -137,6 +137,17 @@ export type Handover = {
   phase: "checkin" | "checkout";
   imageDataUrl: string;
   takenAt: string;
+  /**
+   * What the person receiving it wrote at the time, if anything.
+   *
+   * Only ever written at check-in, by the renter, and it is the one place they can say
+   * "this was already like this" before they have used the thing. It was collected, shown
+   * to both parties, and then dropped on the floor: the query that gathers evidence never
+   * selected the column, so the arbitrator judged the photograph without the sentence
+   * explaining it. A rental was decided against a renter whose note said the headlight was
+   * already broken when they collected it.
+   */
+  note: string | null;
 };
 
 /** What the owner advertised, which predates every other piece of evidence here. */
@@ -190,6 +201,17 @@ export async function arbitrate(input: {
         .join("\n")
     : "No handover photographs were taken.";
 
+  // The notes go inside the untrusted block below, unlike the line above. The phase and
+  // the timestamp are the server's own facts; the sentence is something a party typed, and
+  // typed text is data wherever it was collected from. CLAUDE.md section 6.
+  const handoverSaid = handover
+    .filter((photo) => photo.note)
+    .map(
+      (photo) =>
+        `At ${photo.phase === "checkin" ? "check-in" : "check-out"} the person receiving it wrote:\n${photo.note}`
+    )
+    .join("\n\n");
+
   const appealed = input.appeals.length
     ? input.appeals
         .map((appeal) => `The ${appeal.side} appealed, ${appeal.filedAt}:\n${appeal.statement}`)
@@ -204,7 +226,7 @@ export async function arbitrate(input: {
     system: POLICY,
     // The handover note sits outside the untrusted block because the server wrote it: the
     // phases and the times come from the chain and the database, not from either party.
-    text: `${listingNote}\n${handoverNote}\n\n<untrusted>\n${advertised}\n\n${said}\n\nConversation:\n${conversation}${appealed ? `\n\n${appealed}` : ""}\n</untrusted>`,
+    text: `${listingNote}\n${handoverNote}\n\n<untrusted>\n${advertised}${handoverSaid ? `\n\n${handoverSaid}` : ""}\n\n${said}\n\nConversation:\n${conversation}${appealed ? `\n\n${appealed}` : ""}\n</untrusted>`,
     // Whole and separate, never stacked. They were dropped entirely for a while because two
     // of them plus this text came to about 8100 tokens against the previous provider's 8000
     // a minute. Measured on this one: two images cost 2178 tokens and the entire call 2453,

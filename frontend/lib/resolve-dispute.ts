@@ -55,7 +55,9 @@ export async function resolveDispute(rentalId: bigint) {
   // be an argument, which is what makes the pair worth more than anything filed afterwards.
   const { data: handover } = await supabase
     .from("handover_photos")
-    .select("phase, image_path, created_at")
+    // note included, which it was not. The renter's own words at collection were being
+    // collected, shown and then withheld from the one reader who decides the money.
+    .select("phase, image_path, created_at, note")
     .eq("onchain_rental_id", Number(rentalId));
 
   // Downloaded rather than handed over as links, because the model is given the file itself
@@ -85,9 +87,17 @@ export async function resolveDispute(rentalId: bigint) {
       phase: row.phase as "checkin" | "checkout",
       imageDataUrl: photos.get(row.image_path),
       takenAt: row.created_at as string,
+      note: (row.note as string | null) ?? null,
     }))
-    .filter((row): row is { phase: "checkin" | "checkout"; imageDataUrl: string; takenAt: string } =>
-      Boolean(row.imageDataUrl)
+    .filter(
+      (
+        row
+      ): row is {
+        phase: "checkin" | "checkout";
+        imageDataUrl: string;
+        takenAt: string;
+        note: string | null;
+      } => Boolean(row.imageDataUrl)
     );
 
   const filedPhotos = evidence.filter((row) => row.image_path && photos.has(row.image_path)).length;
