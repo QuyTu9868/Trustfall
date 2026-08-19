@@ -19,7 +19,7 @@ const WORDING = {
   },
   checkout: {
     title: "Photograph it now it is back",
-    why: "The other half of the pair. Damage visible here and not at check-in happened during the rental, and that is a question the arbitrator can answer from two pictures rather than from two stories.",
+    why: "The other half of the pair. Damage visible here and not at check-in happened during the rental, and that is a question the arbitrator can answer from two pictures rather than from two stories. If something is wrong, open a dispute rather than writing it here.",
   },
 } as const;
 
@@ -150,17 +150,30 @@ export function HandoverPhoto({
         <p className="text-xs text-ink-muted">{WORDING[phase].why}</p>
       </div>
 
-      {/* The note is written before sending rather than after, because the picture and the
-          sentence about it are one act. Uploading first and asking afterwards produces a
-          photograph with no note, every time. */}
-      <textarea
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        rows={2}
-        maxLength={500}
-        placeholder="What should the other person look at? Optional, and it goes with the photo."
-        className="rounded-control border border-line bg-surface px-3 py-2 text-sm"
-      />
+      {/* Only at check-in, and the asymmetry is the point.
+
+          The renter is about to use something and needs to say "this was already like
+          this": a scuff they can live with, noted now so that nobody calls it theirs at the
+          end. That claim has to survive the whole rental, which is why it is written down
+          rather than said.
+
+          The owner at check-out has no such need. Whatever they find is either not worth
+          mentioning or worth a dispute, and there is a button for the second one. A note
+          box there only invited them to complain into a field that decides nothing.
+
+          Written before sending rather than after, because the picture and the sentence
+          about it are one act. Uploading first and asking afterwards produces a photograph
+          with no note, every time. */}
+      {phase === "checkin" && (
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          rows={2}
+          maxLength={500}
+          placeholder="Anything already wrong with it? A scratch you can live with, noted now, is a scratch nobody can blame on you later."
+          className="rounded-control border border-line bg-surface px-3 py-2 text-sm"
+        />
+      )}
 
       {preview && (
         // eslint-disable-next-line @next/next/no-img-element
