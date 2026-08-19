@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { AdminRecordActions } from "@/components/admin-record-actions";
+import { AdminSettle } from "@/components/admin-settle";
 import { explorerTxUrl } from "@/lib/chain";
 import {
   DEPOSIT_ONLY,
@@ -151,15 +152,38 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
         {/* The two facts that matter most to somebody auditing this: whether money actually
             moved, and if not, why the server declined to move it. */}
         {verdict.signed ? (
-          <Settlement settled={settled} txHash={verdict.tx_hash} />
+          <>
+            <Settlement settled={settled} txHash={verdict.tx_hash} />
+            {/* Only where it happened. A ruling the arbitrator reached and the server acted
+                on says nothing here, because there is nothing to disclose. */}
+            {verdict.settled_by === "admin" && (
+              <p className="rounded-card border border-line bg-surface p-3 text-sm">
+                <span className="text-pend-ink">Decided by a person, not by the model.</span>{" "}
+                The arbitrator reached the ruling above and the server would not act on it,
+                so somebody with the admin code chose an outcome and signed it.
+                {verdict.settled_note ? ` They said: "${verdict.settled_note}"` : ""}
+              </p>
+            )}
+          </>
         ) : (
           <p className="rounded-card border border-line bg-surface p-3 text-sm text-pend-ink">
-            Nothing was signed. {verdict.held_back_reason} Nobody can sign it instead: the
-            agent is the only address the contract accepts. Seven days after the dispute was
-            opened, anybody at all can finalise it and the deposit returns to the renter.
+            Nothing was signed. {verdict.held_back_reason} The agent is the only address the
+            contract accepts, so nothing can go around it. Somebody holding the admin code
+            can choose one of the three outcomes below and have the server sign it, and
+            failing that, seven days after the dispute was opened anybody at all can finalise
+            it and the deposit returns to the renter.
           </p>
         )}
       </header>
+
+      {/* Directly under the header, because for an unsigned ruling this is the only thing
+          on the page anybody can act on, and it is time limited. */}
+      {!verdict.signed && (
+        <AdminSettle
+          rentalId={verdict.onchain_rental_id}
+          onDone={() => window.location.reload()}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-xl">How it got there</h2>

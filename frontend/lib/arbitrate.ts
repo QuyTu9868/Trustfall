@@ -116,9 +116,14 @@ Two rules about "from", and they matter more than the verdict:
 "says" is one short sentence in your own words.
 
 Confidence is how sure you are, from 0 to 1. Be honest with it: below 0.6 nothing is signed
-at all, and seven days later the deposit returns to the renter by timeout. Nobody overrules
-you, so saying you are unsure is the only way to avoid deciding on evidence that does not
-settle it.`;
+at all. What you decide at or above that stands, and nobody reverses it. Below it, the
+dispute stops rather than resolving: it waits for a person to look at it, and if none does,
+seven days later the deposit returns to the renter by timeout whether or not that was the
+right answer.
+
+So low confidence is not a way out of a hard case. It leaves two people waiting and may end
+in an outcome nobody chose. Use it when the evidence genuinely does not settle the question,
+and not to avoid deciding one that it does.`;
 
 export type Evidence = {
   side: "owner" | "renter";

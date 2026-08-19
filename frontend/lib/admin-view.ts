@@ -17,6 +17,9 @@ export type Verdict = {
   evidence_seen: string;
   findings: { from: string; says: string }[];
   created_at: string;
+  /** Null when the arbitrator's own ruling stands. Set only where a person had to step in. */
+  settled_by: "admin" | null;
+  settled_note: string | null;
 };
 
 export type Filed = {

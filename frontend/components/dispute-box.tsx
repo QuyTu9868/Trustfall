@@ -375,11 +375,17 @@ export function DisputeBox({ rentalId }: { rentalId: bigint }) {
               )}
             </div>
           ) : (
+            // The claim here used to be that nobody could overrule it. That is still true of
+            // a ruling the server acted on, and it stopped being true of this one: a dispute
+            // the arbitrator could not settle can now be settled by a person. Saying so is
+            // the point. Somebody weighing whether to appeal needs to know a human may look
+            // at it, and the old sentence told them the opposite.
             <span className="text-xs text-pend-ink">
-              Not applied. {ruling.held_back_reason} There is no one to overrule it: the
-              agent is the only address the contract lets settle a dispute. Seven days after
-              this was opened, anyone can finalise it and the deposit comes back to the
-              renter.
+              Not applied. {ruling.held_back_reason} Nothing has moved. Because the
+              arbitrator could not settle this one, a person can: the outcome would still be
+              one of the same three, signed by the same address, and recorded as theirs. If
+              nobody does, seven days after this was opened anyone can finalise it and the
+              deposit comes back to the renter.
             </span>
           )}
         </div>

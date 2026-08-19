@@ -176,10 +176,17 @@ export async function notifyRuling(
     verdict: "refund_renter" | "split" | "pay_owner";
     signed: boolean;
     heldBack: string | null;
+    /** Who chose the word. A person only ever decides one the arbitrator could not. */
+    by?: "arbitrator" | "admin";
   }
 ) {
+  // Named, because the two are not interchangeable to somebody whose deposit it was. A
+  // human decision delivered under the model's name would be the app misreporting the one
+  // fact this whole design is about.
+  const who = ruling.by === "admin" ? "A person" : "The arbitrator";
+
   const body = ruling.signed
-    ? `Rental #${rentalId}. The arbitrator ruled: ${OUTCOME[ruling.verdict]}. The contract has moved it.`
+    ? `Rental #${rentalId}. ${who} decided: ${OUTCOME[ruling.verdict]}. The contract has moved it.`
     : `Rental #${rentalId}. The arbitrator ruled, and the server did not act on it. ${
         ruling.heldBack ?? ""
       } Nothing has moved. You can appeal with something it did not have, and seven days after the dispute opened anyone can close it, which returns the deposit to the renter.`.trim();
