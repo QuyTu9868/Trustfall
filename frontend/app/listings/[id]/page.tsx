@@ -61,6 +61,30 @@ export default async function ListingPage(props: {
             <p className="max-w-2xl text-sm whitespace-pre-wrap">{listing.description}</p>
           </section>
 
+          {/* Where, and a way to get there, without this app drawing a map.
+              CLAUDE.md section 7 rules out a map and searching by location, and both of
+              those mean tiles, a key, coordinates and a library on a page that is supposed
+              to stay light. Handing the area to whatever maps application the reader
+              already has costs one link and does the thing they actually wanted. */}
+          {listing.pickup_area && (
+            <section className="flex flex-col gap-2 border-t border-line pt-5">
+              <h2 className="text-lg">Where to collect it</h2>
+              <p className="text-sm">{listing.pickup_area}</p>
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(listing.pickup_area)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-fit text-sm text-live-ink underline underline-offset-2"
+              >
+                Open directions
+              </a>
+              <p className="text-xs text-ink-muted">
+                The area, not the doorstep. Agree the exact spot in the messages once the
+                owner accepts.
+              </p>
+            </section>
+          )}
+
           <section className="flex flex-col gap-2 border-t border-line pt-5">
             <h2 className="text-lg">Owner</h2>
             <p className="tabular text-xs break-all">{listing.owner_address}</p>

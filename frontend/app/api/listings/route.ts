@@ -6,6 +6,7 @@ import {
   IMAGES_PER_LISTING,
   MAX_DESCRIPTION_LENGTH,
   MAX_IMAGE_BYTES,
+  MAX_PICKUP_AREA_LENGTH,
   MAX_TITLE_LENGTH,
   type Category,
 } from "@/lib/listing";
@@ -49,6 +50,7 @@ async function createListing(request: Request) {
   const category = String(form.get("category") ?? "");
   const title = String(form.get("title") ?? "").trim();
   const description = String(form.get("description") ?? "").trim();
+  const pickupArea = String(form.get("pickupArea") ?? "").trim();
   const pricePerDay = Number(form.get("pricePerDay"));
   const deposit = Number(form.get("deposit"));
   const images = form.getAll("images").filter((v): v is File => v instanceof File);
@@ -57,6 +59,7 @@ async function createListing(request: Request) {
     category,
     title,
     description,
+    pickupArea,
     pricePerDay,
     deposit,
     images,
@@ -80,6 +83,7 @@ async function createListing(request: Request) {
       category,
       title,
       description,
+      pickup_area: pickupArea,
       price_per_day: pricePerDay,
       deposit,
       status: "draft",
@@ -145,6 +149,7 @@ async function createListing(request: Request) {
       await moderateListing({
         title,
         description,
+        pickupArea,
         images: photos,
         // The row exists by now, so the check is recorded against it. The preview call the
         // browser makes at step 2 has no listing yet and is deliberately not logged: it is
@@ -174,6 +179,7 @@ type Incoming = {
   category: string;
   title: string;
   description: string;
+  pickupArea: string;
   pricePerDay: number;
   deposit: number;
   images: File[];
@@ -198,6 +204,12 @@ export function firstTextProblem(input: Omit<Incoming, "images">): string | null
   if (!input.description) return "A description is required.";
   if (input.description.length > MAX_DESCRIPTION_LENGTH) {
     return "Description is too long.";
+  }
+  // Required. Somebody has to physically go and collect the thing, and a listing that does
+  // not say roughly where it is cannot be acted on.
+  if (!input.pickupArea) return "Say roughly where it is collected from.";
+  if (input.pickupArea.length > MAX_PICKUP_AREA_LENGTH) {
+    return "That is too long for an area. A district or a neighbourhood is enough.";
   }
   if (!Number.isFinite(input.pricePerDay) || input.pricePerDay <= 0) {
     return "Daily price must be more than 0.";

@@ -24,7 +24,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, owner_address, category, title, description, price_per_day, deposit, status, moderation_status, created_at, listing_images(url, sort_order, uploaded_at)"
+        "id, owner_address, category, title, description, pickup_area, price_per_day, deposit, status, moderation_status, created_at, listing_images(url, sort_order, uploaded_at)"
       )
       .eq("id", id)
       .single();
@@ -77,13 +77,21 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
     const form = await request.formData();
     const title = String(form.get("title") ?? "").trim();
     const description = String(form.get("description") ?? "").trim();
+    const pickupArea = String(form.get("pickupArea") ?? "").trim();
     const pricePerDay = Number(form.get("pricePerDay"));
     const deposit = Number(form.get("deposit"));
     const category = String(form.get("category") ?? "");
 
     // Text only: the stored photos are reused untouched, so there is nothing to validate
     // about them here.
-    const problem = firstTextProblem({ category, title, description, pricePerDay, deposit });
+    const problem = firstTextProblem({
+      category,
+      title,
+      description,
+      pickupArea,
+      pricePerDay,
+      deposit,
+    });
     if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
     // Back to pending first. If the check never finishes, the listing is left honestly
@@ -94,6 +102,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
         category,
         title,
         description,
+        pickup_area: pickupArea,
         price_per_day: pricePerDay,
         deposit,
         status: "draft",
@@ -105,6 +114,7 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
     const verdict = await moderateListing({
       title,
       description,
+      pickupArea,
       images: await urlsToDataUrls(existing.listing_images.map((image) => image.url)),
       listingId: id,
     });

@@ -23,10 +23,20 @@ export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as 
 export const MAX_TITLE_LENGTH = 80;
 export const MAX_DESCRIPTION_LENGTH = 2000;
 
+/**
+ * Short on purpose. This is a neighbourhood, not an address.
+ *
+ * A listing is public before anybody books it, so the exact spot where somebody parks
+ * their car has no business being on it. A hundred characters holds "District 1, near Ben
+ * Thanh market" and does not hold a street number and a floor.
+ */
+export const MAX_PICKUP_AREA_LENGTH = 100;
+
 export type ListingDraft = {
   category: Category | null;
   title: string;
   description: string;
+  pickupArea: string;
   pricePerDay: string;
   deposit: string;
 };
@@ -35,6 +45,7 @@ export const emptyDraft: ListingDraft = {
   category: null,
   title: "",
   description: "",
+  pickupArea: "",
   pricePerDay: "",
   deposit: "",
 };
@@ -57,6 +68,11 @@ export function validateDraft(draft: ListingDraft): FieldErrors {
     errors.description = "Say what it is and what condition it is in.";
   } else if (draft.description.trim().length > MAX_DESCRIPTION_LENGTH) {
     errors.description = `Keep it under ${MAX_DESCRIPTION_LENGTH} characters.`;
+  }
+  if (!draft.pickupArea.trim()) {
+    errors.pickupArea = "Say roughly where it is collected from.";
+  } else if (draft.pickupArea.trim().length > MAX_PICKUP_AREA_LENGTH) {
+    errors.pickupArea = `An area, not an address. Under ${MAX_PICKUP_AREA_LENGTH} characters.`;
   }
 
   const price = Number(draft.pricePerDay);

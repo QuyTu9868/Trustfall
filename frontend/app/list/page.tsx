@@ -17,6 +17,7 @@ import {
 } from "@/lib/listing";
 import { type Moderation, ModerationResult } from "@/components/moderation-result";
 import { LocalPhoto } from "@/components/photo";
+import { PickupArea } from "@/components/pickup-area";
 import { PriceHint } from "@/components/price-hint";
 import { PublishedListing } from "@/components/published-listing";
 import { downscale } from "@/lib/downscale";
@@ -81,6 +82,7 @@ function ListFlow() {
               category: string;
               title: string;
               description: string;
+              pickup_area: string | null;
               price_per_day: string;
               deposit: string;
             }
@@ -91,6 +93,9 @@ function ListFlow() {
           category: found.category as Category,
           title: found.title,
           description: found.description,
+          // Null on anything published before the column existed, and the form treats that
+          // as empty rather than as the string "null".
+          pickupArea: found.pickup_area ?? "",
           pricePerDay: String(Number(found.price_per_day)),
           deposit: String(Number(found.deposit)),
         });
@@ -238,6 +243,7 @@ function ListFlow() {
     body.set("category", draft.category ?? "");
     body.set("title", draft.title.trim());
     body.set("description", draft.description.trim());
+    body.set("pickupArea", draft.pickupArea.trim());
     body.set("pricePerDay", draft.pricePerDay);
     body.set("deposit", draft.deposit);
     files.forEach((file) => body.append("images", file));
@@ -339,6 +345,21 @@ function ListFlow() {
               onChange={(e) => set("description", e.target.value)}
               rows={5}
               className="w-full rounded-control border border-line bg-surface px-3 py-2 text-sm"
+            />
+          </Field>
+
+          {/* An area, and the hint says so. Somebody typing their street and house number
+              here would be publishing it to everybody browsing, months before anybody
+              books. The exact meeting point belongs in the conversation the two of them
+              get once a request exists. */}
+          <Field
+            label="Where it is collected"
+            error={errors.pickupArea}
+            hint="Ward, district and province. Not a street address: the renter gets a link that opens this in their own maps app, and the exact meeting point belongs in the messages once you accept them."
+          >
+            <PickupArea
+              value={draft.pickupArea}
+              onChange={(value) => set("pickupArea", value)}
             />
           </Field>
 

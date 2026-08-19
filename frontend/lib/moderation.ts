@@ -116,6 +116,8 @@ export function setModerationBypass(off: boolean) {
 export async function moderateListing(input: {
   title: string;
   description: string;
+  /** Roughly where the item is collected. Optional, because the step 2 preview has none. */
+  pickupArea?: string;
   images: string[];
   /**
    * Which listing this was, when there is one yet.
@@ -128,9 +130,11 @@ export async function moderateListing(input: {
 }): Promise<Verdict> {
   if (moderationBypassed()) return { decision: "approve", reasons: [], findings: [], model: "bypassed" };
 
+  // The pickup area is here for the same reason the other two are: it is a box a stranger
+  // types into, and every such box is a place to put something that should not be published.
   const untrusted = `<untrusted>
 Title: ${input.title}
-Description: ${input.description}
+Description: ${input.description}${input.pickupArea ? `\nCollected from: ${input.pickupArea}` : ""}
 </untrusted>`;
 
   try {

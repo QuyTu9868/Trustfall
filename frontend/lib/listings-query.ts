@@ -21,6 +21,8 @@ export type ListingCard = {
 
 export type ListingDetail = ListingCard & {
   description: string;
+  /** Roughly where it is collected. Null on listings published before this existed. */
+  pickup_area: string | null;
   owner_address: string;
   created_at: string;
   moderation_status: string;
@@ -76,7 +78,7 @@ export async function fetchListing(id: string): Promise<ListingDetail | null> {
   const { data, error } = await supabase
     .from("listings")
     .select(
-      "id, category, title, description, price_per_day, deposit, owner_address, created_at, moderation_status, listing_images(url, sort_order)"
+      "id, category, title, description, pickup_area, price_per_day, deposit, owner_address, created_at, moderation_status, listing_images(url, sort_order)"
     )
     .eq("id", id)
     .eq("status", "published")
