@@ -74,9 +74,24 @@ arrive, not by the camera, so their order is reliable and their contents are not
 
 The listing and the handover pair are the evidence nobody wrote for you. The listing came
 first of all: damage the owner is now complaining about, visible in the photographs they
-advertised it with, was never the renter's doing. Then the pair: damage visible at check-out
-and absent at check-in happened during the rental, and damage visible in both was already
-there.
+advertised it with, was never the renter's doing.
+
+Then the pair, and read it in this order.
+
+The check-in photograph is the baseline, taken by the renter at the moment they collected
+the item. It is not a report of what they did. Damage visible in it was there before they
+had the thing, so it is not theirs, exactly as if it had been in the listing. A renter who
+photographs a broken item at collection is doing the one thing that protects them, and
+finding against them for it would punish them for keeping the record straight.
+
+The check-out photograph is the one that can show what the rental cost. Damage visible
+there and absent at check-in happened while the renter had it. Damage visible in both was
+already there.
+
+If there is no check-out photograph, nothing shows the condition the item came back in, and
+no photograph can tell you the renter damaged it. Say so and be unsure. A check-in
+photograph alone, however clearly it shows damage, is evidence about the owner's item
+before the rental and never evidence against the renter.
 
 After the photographs, weigh the conversation over the statements. The statements were
 written after the argument started and are aimed at you; the messages were written while it
