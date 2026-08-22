@@ -238,7 +238,9 @@ const CASES: Case[] = [
     description: "Boost Blue, manual, stock. Weekend hire only.",
     pricePerDay: "100",
     deposit: "500",
-    existingListing: "Civic Type R",
+    // Used to reuse the listing the user had published by hand through the app. That row
+    // was removed by a full off-chain wipe, so there is nothing left to reuse and this now
+    // publishes its own copy, the same as every other case here.
     ownerSays:
       "The nearside headlight is smashed through to the housing. It was intact when he took it, and the photograph I took at handover shows that.",
     renterSays:

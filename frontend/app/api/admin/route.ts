@@ -37,7 +37,7 @@ export async function GET(request: Request) {
 }
 
 const COLUMNS =
-  "onchain_rental_id, verdict, confidence, reason, signed, tx_hash, held_back_reason, model, evidence_seen, findings, created_at, settled_by, settled_note";
+  "onchain_rental_id, verdict, confidence, reason, signed, tx_hash, held_back_reason, model, evidence_seen, findings, created_at, settled_by, settled_note, gateway, gateway_note";
 
 async function list() {
   const supabase = getSupabaseAdmin();
