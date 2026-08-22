@@ -6,6 +6,7 @@ import { AdminSettle } from "@/components/admin-settle";
 import { explorerTxUrl } from "@/lib/chain";
 import {
   DEPOSIT_ONLY,
+  GATEWAY_LABEL,
   OUTCOME,
   type ChatLine,
   type Filed,
@@ -150,6 +151,52 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
           <Row label="Decided" value={new Date(verdict.created_at).toLocaleString()} />
           <Row label="Read" value={verdict.evidence_seen} />
         </dl>
+
+        {/* Three steps, because that is how many there actually are between a model
+            forming an opinion and a deposit moving, and none of them is optional. The
+            agent proposes a word over HTTP; a Latch policy reads the request before the
+            server ever sees it; the server checks the confidence bar again on its own and
+            signs or refuses. Nothing here says Latch caught anything on this particular
+            rental, only whether the hop happened and what it did. */}
+        {verdict.gateway && (
+          <ol className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4 text-sm">
+            <li className="flex items-baseline justify-between gap-4">
+              <span>1. Agent proposes {OUTCOME[verdict.verdict]}, over HTTP</span>
+              <span className="tabular text-xs text-ink-muted">
+                confidence {verdict.confidence.toFixed(2)}
+              </span>
+            </li>
+            <li className="flex flex-col gap-1">
+              <span className="flex items-baseline justify-between gap-4">
+                <span>2. Latch policy {verdict.gateway === "blocked" ? "refuses it" : "reads it"}</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
+                    verdict.gateway === "blocked"
+                      ? "bg-stop-bg text-stop-ink"
+                      : verdict.gateway === "passed"
+                        ? "bg-okay-bg text-okay-ink"
+                        : "bg-pend-bg text-pend-ink"
+                  }`}
+                >
+                  {GATEWAY_LABEL[verdict.gateway]}
+                </span>
+              </span>
+              {verdict.gateway_note && (
+                <span className="text-xs text-ink-muted">{verdict.gateway_note}</span>
+              )}
+            </li>
+            <li className="flex items-baseline justify-between gap-4">
+              <span>3. Server checks the confidence bar itself, and {verdict.signed ? "signs" : "declines"}</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
+                  verdict.signed ? "bg-live-bg text-live-ink" : "bg-pend-bg text-pend-ink"
+                }`}
+              >
+                {verdict.signed ? "applied" : "held back"}
+              </span>
+            </li>
+          </ol>
+        )}
 
         {/* The two facts that matter most to somebody auditing this: whether money actually
             moved, and if not, why the server declined to move it. */}

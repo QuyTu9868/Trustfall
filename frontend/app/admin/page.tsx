@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { OUTCOME, type Check, type Pending, type Verdict } from "@/lib/admin-view";
+import {
+  GATEWAY_LABEL,
+  OUTCOME,
+  type Check,
+  type Pending,
+  type Verdict,
+} from "@/lib/admin-view";
 
 /**
  * Every ruling the arbitrator reached, one line each.
@@ -195,6 +201,7 @@ export default function AdminPage() {
                 <th className="px-4 py-3 font-normal">Rental</th>
                 <th className="px-4 py-3 font-normal">Outcome</th>
                 <th className="px-4 py-3 font-normal">Confidence</th>
+                <th className="px-4 py-3 font-normal">Gateway</th>
                 <th className="px-4 py-3 font-normal">Acted on</th>
                 <th className="px-4 py-3 font-normal">Reason</th>
                 <th className="px-4 py-3 font-normal">When</th>
@@ -220,6 +227,28 @@ export default function AdminPage() {
                   </td>
                   <td className="px-4 py-3">{OUTCOME[entry.verdict]}</td>
                   <td className="tabular px-4 py-3">{entry.confidence.toFixed(2)}</td>
+                  <td className="px-4 py-3">
+                    {/* Every proposal here leaves the app over HTTP and passes a Latch
+                        policy before the server will act on it. This is the one place that
+                        says so: null on anything ruled before this was tracked, "cleared"
+                        on a proposal the policy let through, "refused" on one it stopped
+                        before the confidence bar downstream ever ran. */}
+                    {entry.gateway ? (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
+                          entry.gateway === "blocked"
+                            ? "bg-stop-bg text-stop-ink"
+                            : entry.gateway === "passed"
+                              ? "bg-okay-bg text-okay-ink"
+                              : "bg-pend-bg text-pend-ink"
+                        }`}
+                      >
+                        {GATEWAY_LABEL[entry.gateway]}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-ink-muted">not recorded</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${

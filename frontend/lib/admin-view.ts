@@ -20,6 +20,15 @@ export type Verdict = {
   /** Null when the arbitrator's own ruling stands. Set only where a person had to step in. */
   settled_by: "admin" | null;
   settled_note: string | null;
+  /**
+   * What happened between the agent proposing this and the server acting on it.
+   *
+   * Null on anything ruled before this was tracked: those proposals did go through the
+   * same hop, but nothing recorded which of the three this was, and guessing one now would
+   * be inventing evidence on the page built to be checked.
+   */
+  gateway: "passed" | "blocked" | "direct" | null;
+  gateway_note: string | null;
 };
 
 export type Filed = {
@@ -73,6 +82,16 @@ export type ListingRow = {
   moderation_status: string;
   moderation_reason: string | null;
   created_at: string;
+};
+
+/**
+ * What the gateway hop did to a proposal, in words a reader who has never heard of Latch
+ * can still follow.
+ */
+export const GATEWAY_LABEL: Record<NonNullable<Verdict["gateway"]>, string> = {
+  passed: "cleared by policy",
+  blocked: "refused by policy",
+  direct: "no gateway configured",
 };
 
 /** What each outcome does to the deposit, in the words somebody losing would read. */
