@@ -246,6 +246,24 @@ chứng thay vì nguyên nhân, tự thêm tính năng ngoài yêu cầu, báo "
 - **Skill đích:** `frontend-e2e-wallet`, `code-change-workflow` (mục B2.4: xem màn hình
   là chưa đủ)
 
+### [2026-08-22] Vừa sửa đúng cột này vài giờ trước, rồi thêm cột mới vẫn quên
+- **Chuyện gì xảy ra:** Thêm hai cột `gateway`, `gateway_note` vào `dispute_verdicts` để
+  ghi lại việc Latch đã cho một đề nghị đi qua. Migration chạy đúng, route ghi đúng, seed
+  bốn ca thật xong xuôi. Mở `/admin` lên đọc thì cả bốn dòng đều `gateway: null` - route
+  đọc danh sách dùng một hằng `COLUMNS` liệt kê tên cột bằng tay, và hằng đó không được
+  thêm hai tên mới vào.
+- **Sai ở đâu:** Đúng **cùng route này**, chỉ vài giờ trước trong cùng phiên, đã thêm
+  cột `settled_by`/`settled_note` và nhớ nối vào `COLUMNS` đúng cách. Lần sau thêm cột
+  mới, thao tác "nối vào hằng liệt kê cột" không được lặp lại như một bước cố định, mà
+  bị coi là việc đã xong từ lần trước.
+- **Luật rút ra:** Khi một route dùng **một hằng liệt kê tên cột bằng tay** (không phải
+  `select("*")`), mỗi lần thêm cột mới vào bảng đó phải tự hỏi "hằng đó đang ở file nào,
+  đã nối chưa" như một bước riêng, không tin vào việc "lần trước mình đã cẩn thận nên
+  lần này chắc cũng vậy". Kiểm bằng cách gọi thật route đó sau migration, đọc giá trị
+  cột mới trong response, không suy luận từ việc ghi vào DB đã đúng.
+- **Skill đích:** `code-change-workflow` (mục A6b, đã có luật quét theo grep khi đổi
+  hình dạng dữ liệu, thêm ví dụ cụ thể này)
+
 ---
 
 ## 3. Thiếu sót khi code
@@ -1048,6 +1066,38 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
   **hoãn thời điểm gọi** chứ không phải kéo dài lời gọi: ở đây là để nguyên lời gọi
   nhanh, chỉ dời lúc nó được phép chạy, và dùng chính nhịp poll sẵn có làm đồng hồ.
 - **Skill đích:** `dapp-production-checklist`, `agentic-engineering`
+
+### [2026-08-22] Chụp `fullPage` rồi kết luận animation theo cuộn đã hỏng, trong khi nó đúng
+- **Chuyện gì xảy ra:** Sửa hiệu ứng landing page sang chạy theo cuộn thật
+  (`animation-timeline: view()`). Chụp `page.screenshot({ fullPage: true })` để kiểm,
+  ảnh ra có những khoảng trắng khổng lồ giữa các mục - trông như nội dung biến mất.
+  Suýt kết luận code hỏng.
+- **Sai ở đâu:** `fullPage: true` khiến Chromium giãn viewport ảo cao bằng cả trang rồi
+  chụp một lần, không cuộn qua từng đoạn. `animation-timeline: view()` tính theo vị trí
+  cuộn thật, nên trong viewport ảo bị giãn đó nhiều phần tử chưa từng "vào tầm nhìn" theo
+  đúng nghĩa, dừng ở opacity 0. Ảnh chụp sai, không phải hiệu ứng sai.
+- **Luật rút ra:** Kiểm code dùng `animation-timeline` hay bất cứ gì dựa vào **vị trí
+  cuộn thật** thì không được dùng `fullPage` screenshot để đánh giá - nó không mô phỏng
+  cuộn, nó giãn khung nhìn. Phải cuộn thật bằng `page.evaluate(() => window.scrollTo())`
+  theo từng nấc rồi chụp viewport thường ở mỗi nấc, hoặc đọc `getComputedStyle().opacity`
+  trực tiếp để có bằng chứng số thay vì chỉ nhìn ảnh.
+- **Skill đích:** `frontend-e2e-wallet`, `design-taste-frontend`
+
+### [2026-08-22] `fill()` một ô input có kiểm soát (controlled) trước khi React hydrate xong
+- **Chuyện gì xảy ra:** Script test gõ mã TOTP vào ô đăng nhập `/admin` bằng
+  `input.fill(code)`, đọc lại `inputValue()` thấy đúng 6 số, nhưng nút "Unlock" vẫn
+  disabled mãi, đợi 30 giây rồi timeout.
+- **Sai ở đâu:** Ô input đó là **controlled component** (`value={code}` lấy từ state
+  React). `fill()` ghi thẳng vào DOM và có dispatch sự kiện, nhưng nếu chạy trước khi
+  React gắn xong `onChange` (trang chưa hydrate hết), sự kiện đó rơi vào khoảng không:
+  DOM có giá trị mới, state `code` trong React vẫn rỗng, nút vẫn tính theo state cũ.
+  Đọc `inputValue()` chỉ thấy DOM, không thấy state, nên trông như "đã gõ đúng rồi mà
+  nút vẫn hỏng".
+- **Luật rút ra:** Với ô input có kiểm soát trong React, chờ `waitUntil: "networkidle"`
+  trước khi tương tác, và ưu tiên `pressSequentially()` (mô phỏng gõ phím thật, chắc
+  chắn bắn đúng sự kiện) hơn `fill()` khi nghi ngờ trang chưa hydrate xong. Nút vẫn
+  disabled sau khi ô "trông như đã điền" là dấu hiệu nên nghi state, không nghi giá trị.
+- **Skill đích:** `frontend-e2e-wallet`
 
 ---
 
