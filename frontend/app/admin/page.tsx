@@ -131,7 +131,7 @@ export default function AdminPage() {
   const held = verdicts?.filter((entry) => !entry.signed).length ?? 0;
 
   return (
-    <main className="flex flex-col gap-6">
+    <main className="flex flex-col gap-8">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl">What the arbitrator did</h1>

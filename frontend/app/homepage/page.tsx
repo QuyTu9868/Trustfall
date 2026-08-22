@@ -17,14 +17,16 @@ export const metadata: Metadata = {
  * the problem it is for, because the claim is the part nobody believes.
  *
  * UI-REFERENCE.md section 5 bans motion everywhere in the app and allows it here. What is
- * here is one fade per section, on scroll, which gives the page a pulse without becoming
- * the thing being demonstrated.
+ * here is one fade per section, staggered on load for the hero above the fold and driven
+ * by actual scroll position for everything under it, so a section three screens down
+ * settles into place when it is reached rather than having finished moving before anyone
+ * got there.
  */
 export default function LandingPage() {
   return (
     <main className="flex flex-col gap-24 pb-12">
       <section className="flex flex-col gap-8 pt-8 md:pt-16">
-        <Reveal className="flex flex-col gap-6">
+        <Reveal hero className="flex flex-col gap-6">
           <p className="text-sm tracking-wide text-ink-muted uppercase">
             Escrow for renting real things
           </p>
@@ -40,14 +42,14 @@ export default function LandingPage() {
           </p>
         </Reveal>
 
-        <Reveal delayMs={120} className="flex flex-wrap items-center gap-5">
+        <Reveal hero delayMs={120} className="flex flex-wrap items-center gap-5">
           <LandingCta />
           <span className="text-sm text-ink-muted">
             An email is enough. A wallet is made for you.
           </span>
         </Reveal>
 
-        <Reveal delayMs={220}>
+        <Reveal hero delayMs={220}>
           {/* The one image above the fold, so it loads eagerly. Everything below waits
               until it is scrolled to, which is what next/image does by default. */}
           <Image
@@ -61,7 +63,7 @@ export default function LandingPage() {
           />
         </Reveal>
 
-        <Reveal delayMs={300}>
+        <Reveal hero delayMs={300}>
           <HandoverDiagram />
         </Reveal>
       </section>
@@ -83,7 +85,7 @@ export default function LandingPage() {
                 className="aspect-[3/4] w-full rounded-card border border-line object-cover"
               />
               <div className="flex flex-col gap-1">
-                <h3 className="text-xl">{shot.title}</h3>
+                <h3 className="font-display text-xl">{shot.title}</h3>
                 <p className="text-sm text-ink-muted">{shot.body}</p>
               </div>
             </Reveal>
@@ -103,7 +105,7 @@ export default function LandingPage() {
             <Reveal key={feature.title} delayMs={index * 90}>
               <article className="flex flex-col gap-3">
                 <feature.Mark />
-                <h3 className="text-xl">{feature.title}</h3>
+                <h3 className="font-display text-xl">{feature.title}</h3>
                 <p className="text-sm leading-relaxed text-ink-muted">{feature.body}</p>
               </article>
             </Reveal>

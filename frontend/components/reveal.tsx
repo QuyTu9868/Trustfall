@@ -14,14 +14,24 @@
 export function Reveal({
   children,
   delayMs = 0,
+  hero = false,
   className = "",
 }: {
   children: React.ReactNode;
   delayMs?: number;
+  /**
+   * The hero is on screen before any scrolling happens, so a scroll-driven animation has
+   * nothing to trigger on: there is no "entering the viewport" for a section that starts
+   * inside it. This falls back to the plain load-triggered fade instead.
+   */
+  hero?: boolean;
   className?: string;
 }) {
   return (
-    <div style={{ animationDelay: `${delayMs}ms` }} className={`reveal ${className}`}>
+    <div
+      style={{ animationDelay: `${delayMs}ms` }}
+      className={`${hero ? "reveal-hero" : "reveal"} ${className}`}
+    >
       {children}
     </div>
   );

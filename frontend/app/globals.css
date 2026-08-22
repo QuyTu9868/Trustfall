@@ -19,9 +19,17 @@
 
 @theme {
   /* Surfaces */
-  --color-canvas: #fbfbfa;
+  /*
+    Canvas sits a step below surface, and that step is what makes a card a card.
+    These were #fbfbfa and #ffffff: a one percent difference, with a border at #eaeaea
+    that was barely there either. A white panel on an almost white page with an almost
+    invisible edge reads as one continuous sheet, which is exactly what a long page of
+    them looked like. Darkening the page rather than tinting the cards keeps every card
+    the same clean white it was.
+  */
+  --color-canvas: #f4f4f2;
   --color-surface: #ffffff;
-  --color-line: #eaeaea;
+  --color-line: #e2e2df;
 
   /* Type. Never pure black: charcoal reads softer at small sizes. */
   --color-ink: #2f3437;
@@ -106,12 +114,34 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Editorial serif for headings: tight tracking, tight leading. */
+/*
+  Editorial serif for headings: tight tracking, tight leading.
+
+  h1 and h2 only. h3 used to be in here too, which meant the word "Dispute" at text-sm
+  inside a card wore the same face as the page title above it, and two things with quite
+  different jobs looked like siblings. The serif marks what a page or a section is; a label
+  inside a panel is a caption and should read as one.
+
+  The landing page has two h3 that are genuine headings rather than labels, and they ask
+  for the serif back by name.
+*/
 h1,
-h2,
-h3 {
+h2 {
   font-family: var(--font-display);
   color: var(--color-ink-strong);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+h3 {
+  font-family: var(--font-sans);
+  color: var(--color-ink-strong);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.font-display {
+  font-family: var(--font-display);
   letter-spacing: -0.02em;
   line-height: 1.15;
 }
@@ -119,27 +149,47 @@ h3 {
 /*
   The landing page fade, and the only movement in the whole app.
 
-  backwards fill holds the element at the start of the animation during its delay, which is
-  what makes the stagger work. Only opacity and transform move, both of which the
-  compositor handles without laying the page out again.
+  Driven by scroll position now, not by a fixed delay from page load. The delay version
+  animated everything within the first second regardless of where it sat on the page, so a
+  section three screens down had already finished moving by the time anyone scrolled to it:
+  the comment above this block used to say "on scroll" and the code did not do that. This
+  does, with animation-timeline: view() rather than a scroll listener in JavaScript, so it
+  costs nothing to run and nothing to ship.
 
-  The element's resting state is visible, so a browser that ignores the animation shows the
-  content rather than hiding it. That is the point: this used to be done in JavaScript and
-  the page rendered blank until React arrived.
+  entry 0% to entry 45% means the animation completes shortly after a section starts
+  becoming visible rather than exactly at the top of the viewport, which reads as the
+  section settling into place rather than snapping in right at the edge.
+
+  The element's resting state is visible, so a browser that does not know view() shows the
+  content plainly rather than hiding it: the whole reason this moved out of JavaScript in
+  the first place was a screenshot that came back blank because content stayed invisible
+  until React had run. Un-animated is the safe failure here, same as before.
 */
 .reveal {
-  animation: reveal 0.7s ease-out backwards;
+  animation: reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-timeline: view();
+  animation-range: entry 0% entry 45%;
 }
 
 @keyframes reveal {
   from {
     opacity: 0;
-    transform: translateY(1rem);
+    transform: translateY(1.25rem);
   }
 }
 
+/*
+  The hero is seen before any scrolling happens, so it cannot use the scroll timeline: there
+  is no entry to animate on. It keeps the original load-triggered fade, slightly larger and
+  slower than the rest so the page reads as settling rather than every section moving alike.
+*/
+.reveal-hero {
+  animation: reveal 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .reveal {
+  .reveal,
+  .reveal-hero {
     animation: none;
   }
 }
