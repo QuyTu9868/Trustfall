@@ -1099,6 +1099,21 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
   disabled sau khi ô "trông như đã điền" là dấu hiệu nên nghi state, không nghi giá trị.
 - **Skill đích:** `frontend-e2e-wallet`
 
+### [2026-08-22] Gọi `tsx` thẳng vào script seed, bỏ qua wrapper npm đã có sẵn
+- **Chuyện gì xảy ra:** Muốn dựng một ca dispute dùng một lần để test nút Admin Settle,
+  gọi thẳng `npx tsx scripts/seed-disputes.ts`. Chết ngay ở dòng import đầu vì
+  `lib/resolve-dispute.ts` có `import "server-only"`, cần cờ `--conditions=react-server`.
+  Sửa xong lại thiếu `LATCH_API_KEY` vì file đó không nằm trong hai `.env` mà lệnh gọi
+  thẳng có đọc, nó nằm ở `.env.vercel` cùng cấp repo, không phải `.env.local` hay
+  `.env.test`.
+- **Sai ở đâu:** `package.json` đã có sẵn script `seed:disputes` gói đúng cờ và đúng
+  danh sách `--env-file`, chỉ cần đọc nó trước. Gọi thẳng công cụ thay vì dùng wrapper đã
+  có là đoán lại một cấu hình người khác (hoặc chính mình phiên trước) đã giải quyết rồi.
+- **Luật rút ra:** Trước khi chạy một script TypeScript/Node bằng tay, `grep` tên file đó
+  trong `package.json` trước. Có script gói sẵn thì dùng nguyên nó, đừng tự ráp lại cờ và
+  đường dẫn `.env` từ trí nhớ.
+- **Skill đích:** `code-change-workflow`
+
 ---
 
 ## 4. Không ghi vào đây

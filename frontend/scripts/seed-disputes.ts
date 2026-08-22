@@ -261,6 +261,36 @@ const CASES: Case[] = [
     flow: "returned",
     pickupArea: "Phường Thanh Bình, Quận Hải Châu, Thành phố Đà Nẵng",
   },
+  {
+    title: "Riverside hotel room, Ha Tien",
+    category: "house",
+    description: "Twin room, river view, breakfast included.",
+    pricePerDay: "40",
+    deposit: "60",
+    // Built for one purpose: a renter confessing to real damage, mid-rental, with nothing
+    // resembling a check-out photograph anywhere in the record. If the guard in
+    // app/api/agent/resolve-dispute/route.ts is not doing its job, this is the shape of
+    // case that slips through it: a confident pay_owner with no photograph of the return
+    // to support it, held up only by a chat log.
+    ownerSays:
+      "The renter admitted breaking the television while still in the room. I want the deposit to cover a replacement.",
+    renterSays:
+      "I leaned back and knocked it with the remote. The corner of the screen went dark. I said I would pay for it and I still will.",
+    chat: [
+      { from: "renter", body: "Bad news, I knocked the TV with the remote and the screen has cracked." },
+      { from: "owner", body: "How bad is it? That is a new television." },
+      { from: "renter", body: "The whole corner of the screen is dark now. I am sorry, I will pay for it." },
+    ],
+    expect: "pay_owner held back for having no check-out photograph, whatever the confidence",
+    // Check-in only, because flow "active" never takes a check-out shot: the dispute is
+    // opened while the renter still has the room. Real photographs of a real room, so the
+    // arbitrator is reading the same walls the renter is describing rather than a drawn
+    // rectangle.
+    handover: { checkin: "file:hotel/nha-01-a.jpg", checkout: "clean" },
+    photo: "file:hotel/nha-01-b.jpg",
+    flow: "active",
+    pickupArea: "Phường Tô Châu, Thành phố Hà Tiên, Tỉnh Kiên Giang",
+  },
 ];
 
 async function wait(hash: `0x${string}`, label: string) {
