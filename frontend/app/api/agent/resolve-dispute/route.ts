@@ -124,6 +124,15 @@ export async function POST(request: Request) {
     const { error: logError } = await getSupabaseAdmin().from("dispute_verdicts").upsert(
       {
         onchain_rental_id: Number(rentalId),
+        // What the hop did, recorded from the far side of it. A request that arrives here
+        // with the gateway's credential on it got through a policy; one that arrives
+        // without, on a server with no secret configured, went straight from the agent to
+        // the signer with nothing in between. Both are worth being able to tell apart, and
+        // until now only the refusal left a trace.
+        gateway: gate.guarded ? "passed" : "direct",
+        gateway_note: gate.guarded
+          ? "The policy read this proposal and let it through with its credential attached."
+          : "No gateway in front of this server, so the proposal reached the signer directly.",
         verdict: body.verdict,
         confidence,
         reason: body.reason,

@@ -188,6 +188,13 @@ export async function resolveDispute(rentalId: bigint) {
       await supabase.from("dispute_verdicts").upsert(
         {
           onchain_rental_id: Number(rentalId),
+          // The refusal, in its own field rather than only inside a sentence. deniedBy
+          // names the filter that said no, which is the difference between "a policy
+          // stopped this" and knowing which rule to read.
+          gateway: "blocked",
+          gateway_note: error.deniedBy
+            ? `Refused by ${error.deniedBy}: ${error.reason}`
+            : error.reason,
           verdict: verdict.verdict,
           confidence: verdict.confidence,
           reason: verdict.reason,

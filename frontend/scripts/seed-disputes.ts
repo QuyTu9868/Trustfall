@@ -93,6 +93,15 @@ type Case = {
    * the marketplace and only one of them attached to the dispute anybody reads about.
    */
   existingListing?: string;
+  /**
+   * Roughly where it is collected, in the shape the publish form produces.
+   *
+   * Written here rather than left null because this script inserts listings straight into
+   * the table, going around the form and its required field. A seeded listing with no area
+   * would be the only kind anybody could publish without one, and the demo would be four
+   * listings that all quietly lack the block a real one has.
+   */
+  pickupArea: string;
 };
 
 /**
@@ -173,6 +182,9 @@ const CASES: Case[] = [
     handover: { checkin: "clean", checkout: "clean" },
     photo: "vehicles",
     flow: "returned",
+    // Real entries from data/vn-places.json rather than invented ones, so the directions
+    // link resolves to somewhere that exists.
+    pickupArea: "Phường Phúc Xá, Quận Ba Đình, Thành phố Hà Nội",
   },
   {
     title: "Wool overcoat, size M",
@@ -195,6 +207,7 @@ const CASES: Case[] = [
     handover: { checkin: "clean", checkout: "damaged" },
     photo: "clothing",
     flow: "returned",
+    pickupArea: "Phường Tân Định, Quận 1, Thành phố Hồ Chí Minh",
   },
   {
     title: "Studio apartment near Ben Thanh",
@@ -217,6 +230,7 @@ const CASES: Case[] = [
     handover: { checkin: "clean", checkout: "clean" },
     photo: "homes",
     flow: "active",
+    pickupArea: "Phường 14, Quận 3, Thành phố Hồ Chí Minh",
   },
   {
     title: "Civic Type R",
@@ -243,6 +257,7 @@ const CASES: Case[] = [
     handover: { checkin: "file:Civic/civic_1.jpg", checkout: "file:Civic/be_den_hau.png" },
     photo: "file:Civic/civic_1.jpg",
     flow: "returned",
+    pickupArea: "Phường Thanh Bình, Quận Hải Châu, Thành phố Đà Nẵng",
   },
 ];
 
@@ -324,6 +339,7 @@ async function main() {
         category: item.category,
         title: item.title,
         description: item.description,
+        pickup_area: item.pickupArea,
         price_per_day: item.pricePerDay,
         deposit: item.deposit,
         status: "published",
