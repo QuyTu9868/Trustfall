@@ -14,12 +14,20 @@ const nav = [
   { href: "/profile", label: "Profile" },
 ];
 
+// Meta pages about the project rather than part of it: nothing on them needs a wallet, so
+// they stay in the row even where the rest of nav is hidden for having no wallet behind it.
+const metaNav = [
+  { href: "/presentation", label: "Presentation" },
+  { href: "/roadmap", label: "Roadmap" },
+];
+
 export function SiteHeader() {
   const pathname = usePathname();
   const unread = useUnread();
 
-  // Nothing behind these links is reachable signed out, and a row of dead ends is a worse
-  // first impression than no row at all. The wordmark and the sign in button stay.
+  // Nothing behind the app links is reachable signed out, and a row of dead ends is a worse
+  // first impression than no row at all. The wordmark, the meta pages, and the sign in
+  // button stay.
   const landing = pathname === "/homepage";
 
   return (
@@ -30,7 +38,7 @@ export function SiteHeader() {
         </Link>
 
         <nav className="flex items-center gap-6 text-sm">
-          {(landing ? [] : nav).map((item) => {
+          {(landing ? metaNav : [...nav, ...metaNav]).map((item) => {
             const active =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
