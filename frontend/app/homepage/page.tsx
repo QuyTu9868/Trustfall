@@ -142,7 +142,7 @@ export default function LandingPage() {
             <p className="max-w-3xl text-ink-muted">
               Either side can open a dispute while the rental is running or just after it
               ends. Both write what happened. An AI agent reads the two accounts and the
-              conversation, and picks one of exactly three outcomes.
+              messages, and picks one of exactly three outcomes.
             </p>
 
             <div className="grid gap-4 sm:grid-cols-3">
@@ -171,7 +171,7 @@ export default function LandingPage() {
           <h2 className="max-w-2xl text-4xl md:text-5xl">Put something up, or take something out.</h2>
           <p className="max-w-2xl text-ink-muted">
             List an item, rent one from your other account, and take it all the way through
-            a dispute if you like. Every step is on chain and every step is reversible until
+            a dispute if you like. Every step is on chain, and you can undo any step until
             the money moves.
           </p>
         </Reveal>

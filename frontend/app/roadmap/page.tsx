@@ -115,6 +115,6 @@ const MAINNET = [
   },
   {
     title: "A reputation token and rental terms on IPFS",
-    body: "A token stuck to one wallet forever, so it cannot be sold or faked, carrying rental history. And the terms both sides agreed to, stored where neither can quietly edit them later.",
+    body: "A soulbound token carrying rental history, plus the terms both sides agreed to stored where neither can quietly edit them later.",
   },
 ];

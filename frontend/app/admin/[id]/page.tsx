@@ -186,7 +186,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
               )}
             </li>
             <li className="flex items-baseline justify-between gap-4">
-              <span>3. Server checks the confidence bar itself, and {verdict.signed ? "signs" : "declines"}</span>
+              <span>3. Server checks the confidence bar itself, and {verdict.signed ? "signs" : "says no"}</span>
               <span
                 className={`rounded-full px-2 py-0.5 text-xs tracking-wide uppercase ${
                   verdict.signed ? "bg-live-bg text-live-ink" : "bg-pend-bg text-pend-ink"
@@ -313,7 +313,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xl">The handover photographs</h2>
+        <h2 className="text-xl">The handover photos</h2>
         <p className="text-sm text-ink-muted">
           Taken at check-in and check-out regardless of a dispute, not filed for one. Shown
           here because they are the "before and after" the arbitrator itself was given.
@@ -343,7 +343,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
                         className="max-h-80 w-full rounded-card object-contain"
                       />
                     ) : (
-                      <span className="text-xs text-ink-muted">No photograph on file.</span>
+                      <span className="text-xs text-ink-muted">No photo on file.</span>
                     )}
                   </>
                 ) : (
@@ -414,7 +414,7 @@ function Filing({
               className="max-h-80 w-full rounded-card object-contain"
             />
           ) : (
-            <span className="text-xs text-ink-muted">No photograph filed.</span>
+            <span className="text-xs text-ink-muted">No photo filed.</span>
           )}
         </>
       ) : (

@@ -210,10 +210,10 @@ export default function PresentationPage() {
 
         <div className="grid gap-6 sm:grid-cols-2">
           <Reveal delayMs={90} className="flex flex-col gap-2">
-            <h3 className="font-display text-xl">A blockchain cannot verify a physical object.</h3>
+            <h3 className="font-display text-xl">A blockchain cannot check a real object.</h3>
             <p className="text-sm text-ink-muted">
-              Every photograph is filed by one of the two people arguing. It can be old, a
-              screenshot, or generated. What the chain guarantees is that nobody could change
+              Every photo is filed by one of the two people arguing. It can be old, a
+              screenshot, or AI-made. What the chain makes sure of is that nobody could change
               it after it arrived and that the server wrote the timestamp.
             </p>
           </Reveal>
@@ -235,7 +235,7 @@ export default function PresentationPage() {
           <h2 className="max-w-2xl text-4xl md:text-5xl">Go look for yourself.</h2>
           <p className="max-w-2xl text-ink-muted">
             List something, rent it from a second account, and take it through a dispute. Every
-            step is on chain and every step is reversible until the money moves.
+            step is on chain, and you can undo any step until the money moves.
           </p>
         </Reveal>
         <Reveal delayMs={120} className="flex flex-wrap gap-4">
@@ -269,7 +269,7 @@ const LAYERS = [
   },
   {
     who: "The server",
-    title: "Signs, or declines",
+    title: "Signs, or says no",
     body: "Holds the only key. Checks the confidence bar and the evidence again before it signs anything.",
   },
   {

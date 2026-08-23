@@ -141,7 +141,7 @@ export function AdminRecordActions({
           {rentalId ? (
             <>
               Deletes Trustfall&rsquo;s account of the dispute: the ruling, both statements,
-              every photograph, and the conversation.{" "}
+              every photo, and the messages.{" "}
               <strong className="text-ink">
                 Rental #{rentalId} stays on the contract exactly as it is.
               </strong>{" "}
@@ -151,7 +151,7 @@ export function AdminRecordActions({
             </>
           ) : (
             <>
-              Deletes the listing, its photographs and its moderation history. Any rental
+              Deletes the listing, its photos and its moderation history. Any rental
               already made against it stays on the contract and keeps working; the page it
               came from is what disappears.
             </>

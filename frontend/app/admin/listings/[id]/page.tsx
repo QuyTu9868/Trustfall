@@ -93,7 +93,7 @@ export default function AdminListingPage({ params }: { params: Promise<{ id: str
 
       {images.length > 0 && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-xl">The photographs it was checked with</h2>
+          <h2 className="text-xl">The photos it was checked with</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {images.map((url) => (
               // eslint-disable-next-line @next/next/no-img-element

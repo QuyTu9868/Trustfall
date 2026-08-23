@@ -26,7 +26,7 @@ const ARBITRATION_TARGET_MS = 30 * 1000;
 
 const STAGES = [
   { until: 20, label: "Reading what was filed" },
-  { until: 55, label: "Comparing the photographs" },
+  { until: 55, label: "Comparing the photos" },
   { until: 85, label: "Weighing it against policy" },
   { until: 100, label: "Preparing to sign" },
 ] as const;
@@ -233,7 +233,7 @@ export function DisputeBox({
         <h3 className="text-sm">Dispute{!stillOpen && status ? " (resolved)" : ""}</h3>
         <p className="text-xs text-ink-muted">
           Both accounts go to an arbitrator, which reads the statements and your
-          conversation and picks one of three outcomes for the deposit. It never sees an
+          messages and picks one of three outcomes for the deposit. It never sees an
           amount and never moves the money: the contract works out the numbers itself.
         </p>
       </div>
