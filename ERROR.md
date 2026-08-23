@@ -1114,6 +1114,25 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
   đường dẫn `.env` từ trí nhớ.
 - **Skill đích:** `code-change-workflow`
 
+### [2026-08-23] Trang mới 500 toàn bộ, tưởng do nội dung, hoá ra cache Turbopack hỏng
+- **Chuyện gì xảy ra:** Vừa viết xong nội dung `/roadmap`, chạy `next dev` để chụp ảnh
+  thì route trả 500, log ghi panic Turbopack khi biên dịch `globals.css`
+  (`node process exited ... 0xc0000142`). Nghi do nội dung trang mới, thử giết vài
+  process `node` lạ rồi khởi động lại - vẫn 500. Test luôn `/presentation` (trang đã
+  chạy tốt trước đó trong cùng phiên) và cả `/homepage` - **cả hai cũng 500**, chứng
+  minh không liên quan gì tới trang vừa viết.
+- **Sai ở đâu:** Không phải sai thao tác, mà là **thứ tự chẩn đoán chưa đúng**: lẽ ra nên
+  test một route cũ đã biết chạy tốt **trước tiên**, ngay khi thấy 500, để tách "lỗi do
+  thay đổi vừa làm" khỏi "lỗi môi trường" - đây đúng bước A2 của skill
+  `code-change-workflow` mà bỏ qua vài phút mới quay lại làm.
+- **Luật rút ra:** Gặp lỗi 500/crash ngay sau khi thêm file mới, việc đầu tiên là mở một
+  route **không đụng tới** để xem nó có sập theo không, trước khi nghi nội dung vừa viết.
+  Với Turbopack trên Windows báo panic dạng "process exited ... 0xc0000142" khi biên
+  dịch một file không liên quan gì tới thay đổi (ở đây là `globals.css`, file mọi trang
+  đều dùng), nghi ngay **cache `.next` hỏng** trước khi nghi code: `rm -rf .next` rồi
+  khởi động lại. Ở đây đúng là nguyên nhân, và mọi route hết 500 ngay sau đó.
+- **Skill đích:** `code-change-workflow`, `vibe-code-dapp`
+
 ---
 
 ## 4. Không ghi vào đây
