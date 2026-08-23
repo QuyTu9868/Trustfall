@@ -234,7 +234,7 @@ export function DisputeBox({
         <p className="text-xs text-ink-muted">
           Both accounts go to an arbitrator, which reads the statements and your
           conversation and picks one of three outcomes for the deposit. It never sees an
-          amount and never moves the money: the contract does the arithmetic itself.
+          amount and never moves the money: the contract works out the numbers itself.
         </p>
       </div>
 

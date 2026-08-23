@@ -159,7 +159,7 @@ export default function LandingPage() {
             <p className="max-w-3xl border-t border-line pt-6 text-sm text-ink-muted">
               The agent never says an amount and never holds a key. It sends one of those
               three words and a rental id. The contract looks up the deposit it is already
-              holding and does the arithmetic itself. If the agent is unsure, it says so and
+              holding and works out the numbers itself. If the agent is unsure, it says so and
               a person decides instead.
             </p>
           </div>

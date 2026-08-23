@@ -80,7 +80,7 @@ const NOW = [
   },
   {
     title: "A person can step in when the agent cannot decide",
-    body: "Only for rulings the agent left unsigned, gated by a live authenticator code. A verdict the agent already signed can never be overruled.",
+    body: "Only for rulings the agent left unsigned, gated by a live one-time code. A verdict the agent already signed can never be overruled.",
   },
   {
     title: "Two-way reviews",
@@ -99,7 +99,7 @@ const MAINNET = [
   },
   {
     title: "More than one person behind the admin override",
-    body: "Right now a single admin, gated by one authenticator code, can decide the rulings the agent left unsigned. A real product needs more than one person able to do that, and a record of who.",
+    body: "Right now a single admin, gated by a one-time code, can decide the rulings the agent left unsigned. A real product needs more than one person able to do that, and a record of who.",
   },
   {
     title: "Identity verification, insurance, and deposit tiers",
@@ -115,6 +115,6 @@ const MAINNET = [
   },
   {
     title: "A reputation token and rental terms on IPFS",
-    body: "A soulbound token carrying rental history, and the terms both sides agreed to stored where neither can quietly edit them later.",
+    body: "A token stuck to one wallet forever, so it cannot be sold or faked, carrying rental history. And the terms both sides agreed to, stored where neither can quietly edit them later.",
   },
 ];

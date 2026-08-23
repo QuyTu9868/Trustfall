@@ -36,7 +36,7 @@ export default function PresentationPage() {
             contract, not with the company. When two sides argue over a returned item, a
             language model reads the evidence and proposes a verdict. It never holds a key
             and never states an amount. Every command it sends has to pass a policy gateway
-            first, and the contract still does the arithmetic itself.
+            first, and the contract still works out the numbers itself.
           </p>
         </Reveal>
 
@@ -96,7 +96,7 @@ export default function PresentationPage() {
             </blockquote>
             <p className="text-sm text-ink-muted">
               In numbers: every verdict needs 0.6 confidence to be signed at all. Awarding the
-              full deposit to the owner needs 0.9. That asymmetry is written once, in Rust, in
+              full deposit to the owner needs 0.9. That difference is written once, in Rust, in
               the one place the agent cannot edit it, and it never lowers a bar or names an
               amount, it only ever narrows what the agent is allowed to be sure about.
             </p>
@@ -149,11 +149,11 @@ export default function PresentationPage() {
 
         <Reveal delayMs={160}>
           <p className="max-w-2xl text-sm text-ink-muted">
-            Below the confidence bar, nothing is signed. There is no human resolver at that
-            point, only a person who chooses to step in through <code>/admin</code>, gated by
-            a live authenticator code. Left alone, seven days after a dispute opens anyone can
-            close it and the deposit returns to the renter, which treats an unjudged dispute as
-            the platform&rsquo;s failure rather than the renter&rsquo;s.
+            Below the confidence bar, nothing is signed. Nobody is waiting to decide it either,
+            only a person who chooses to step in through <code>/admin</code>, gated by a live
+            one-time code. Left alone, seven days after a dispute opens anyone
+            can close it and the deposit returns to the renter. That treats a dispute nobody
+            ruled on as the platform&rsquo;s failure, not the renter&rsquo;s.
           </p>
         </Reveal>
       </section>
@@ -274,7 +274,7 @@ const LAYERS = [
   },
   {
     who: "The contract",
-    title: "Does the arithmetic",
+    title: "Works out the numbers",
     body: "Takes one of three words and a rental id. It looks up the deposit it is already holding and works out the split itself.",
   },
 ];
