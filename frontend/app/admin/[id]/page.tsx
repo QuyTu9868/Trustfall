@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import { AdminRecordActions } from "@/components/admin-record-actions";
 import { AdminSettle } from "@/components/admin-settle";
+import { ZoomablePhoto } from "@/components/zoomable-photo";
 import { explorerTxUrl } from "@/lib/chain";
 import {
   DEPOSIT_ONLY,
@@ -336,8 +337,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
                       <p className="text-sm whitespace-pre-wrap break-words">{shot.note}</p>
                     )}
                     {shot.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <ZoomablePhoto
                         src={shot.image_url}
                         alt={`The item at ${phase}`}
                         className="max-h-80 w-full rounded-card object-contain"
@@ -407,8 +407,7 @@ function Filing({
           {entry.image_url ? (
             /* object-contain, because a handover photo cropped square can hide the very
                damage it was filed to show. */
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <ZoomablePhoto
               src={entry.image_url}
               alt={`Filed by the ${side}`}
               className="max-h-80 w-full rounded-card object-contain"

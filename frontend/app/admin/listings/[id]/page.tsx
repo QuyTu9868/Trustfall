@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { AdminRecordActions } from "@/components/admin-record-actions";
+import { ZoomablePhoto } from "@/components/zoomable-photo";
 import type { Check, ListingRow } from "@/lib/admin-view";
 
 type Detail = { listing: ListingRow; images: string[]; checks: Check[] };
@@ -96,8 +97,7 @@ export default function AdminListingPage({ params }: { params: Promise<{ id: str
           <h2 className="text-xl">The photos it was checked with</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {images.map((url) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <ZoomablePhoto
                 key={url}
                 src={url}
                 alt="Filed with the listing"
