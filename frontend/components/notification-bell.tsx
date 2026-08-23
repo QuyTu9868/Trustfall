@@ -124,7 +124,7 @@ export function NotificationBell() {
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-10 cursor-default"
           />
-          <div className="absolute right-0 z-20 mt-2 flex w-80 flex-col divide-y divide-line rounded-card border border-line bg-surface shadow-sm">
+          <div className="absolute right-0 z-20 mt-2 flex max-h-[70vh] w-80 flex-col divide-y divide-line overflow-y-auto rounded-card border border-line bg-surface shadow-sm">
             <Section
               title="Rentals and listings"
               count={items.length}

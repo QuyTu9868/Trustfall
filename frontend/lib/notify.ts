@@ -185,11 +185,12 @@ export async function notifyRuling(
   // fact this whole design is about.
   const who = ruling.by === "admin" ? "A person" : "The arbitrator";
 
+  // The held-back reason (confidence numbers, what evidence was missing) is written for
+  // /admin, for somebody auditing the arbitrator. A party to the rental does not need the
+  // mechanics, only what it means for them: nothing moved, and what they can do about it.
   const body = ruling.signed
     ? `Rental #${rentalId}. ${who} decided: ${OUTCOME[ruling.verdict]}. The contract has moved it.`
-    : `Rental #${rentalId}. The arbitrator ruled, and the server did not act on it. ${
-        ruling.heldBack ?? ""
-      } Nothing has moved. You can appeal with something it did not have, and seven days after the dispute opened anyone can close it, which returns the deposit to the renter.`.trim();
+    : `Rental #${rentalId}. The arbitrator was not sure enough to decide on its own, so nothing has moved. You can appeal with something new, or wait: seven days after the dispute opened, anyone can close it, which returns the deposit to the renter.`;
 
   for (const recipient of new Set(parties.map((p) => p.toLowerCase()))) {
     await write(
