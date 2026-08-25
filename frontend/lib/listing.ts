@@ -32,6 +32,13 @@ export const MAX_DESCRIPTION_LENGTH = 2000;
  */
 export const MAX_PICKUP_AREA_LENGTH = 100;
 
+/**
+ * Deliberately separate from pickup_area and from the map pin, and none of the three is
+ * derived from the others. A building name, a floor, a gate code: things a ward name and a
+ * dot on a map cannot say between them, typed by the owner because they chose to.
+ */
+export const MAX_STREET_ADDRESS_LENGTH = 150;
+
 export type ListingDraft = {
   category: Category | null;
   title: string;
@@ -39,6 +46,7 @@ export type ListingDraft = {
   pickupArea: string;
   lat: number | null;
   lng: number | null;
+  streetAddress: string;
   pricePerDay: string;
   deposit: string;
 };
@@ -50,6 +58,7 @@ export const emptyDraft: ListingDraft = {
   pickupArea: "",
   lat: null,
   lng: null,
+  streetAddress: "",
   pricePerDay: "",
   deposit: "",
 };
@@ -77,6 +86,10 @@ export function validateDraft(draft: ListingDraft): FieldErrors {
     errors.pickupArea = "Say roughly where it is collected from.";
   } else if (draft.pickupArea.trim().length > MAX_PICKUP_AREA_LENGTH) {
     errors.pickupArea = `An area, not an address. Under ${MAX_PICKUP_AREA_LENGTH} characters.`;
+  }
+  // Optional: the ward alone is enough to publish, this only adds to it.
+  if (draft.streetAddress.trim().length > MAX_STREET_ADDRESS_LENGTH) {
+    errors.streetAddress = `Keep it under ${MAX_STREET_ADDRESS_LENGTH} characters.`;
   }
 
   const price = Number(draft.pricePerDay);

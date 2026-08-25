@@ -26,6 +26,8 @@ export type ListingDetail = ListingCard & {
   /** The exact pickup spot, chosen on a map. Null on a listing where the owner skipped it. */
   lat: number | null;
   lng: number | null;
+  /** A building name, floor, or landmark, typed freely and shown as-is. */
+  street_address: string | null;
   owner_address: string;
   created_at: string;
   moderation_status: string;
@@ -81,7 +83,7 @@ export async function fetchListing(id: string): Promise<ListingDetail | null> {
   const { data, error } = await supabase
     .from("listings")
     .select(
-      "id, category, title, description, pickup_area, lat, lng, price_per_day, deposit, owner_address, created_at, moderation_status, listing_images(url, sort_order)"
+      "id, category, title, description, pickup_area, lat, lng, street_address, price_per_day, deposit, owner_address, created_at, moderation_status, listing_images(url, sort_order)"
     )
     .eq("id", id)
     .eq("status", "published")

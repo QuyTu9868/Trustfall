@@ -66,10 +66,15 @@ export default async function ListingPage(props: {
               start; a listing without one falls back to a text search of the area, which
               a maps app can only guess the centre of. Either way this page hands off to
               whatever maps application the reader already has rather than embedding one. */}
-          {(listing.pickup_area || (listing.lat !== null && listing.lng !== null)) && (
+          {(listing.pickup_area ||
+            listing.street_address ||
+            (listing.lat !== null && listing.lng !== null)) && (
             <section className="flex flex-col gap-2 border-t border-line pt-5">
               <h2 className="text-lg">Where to collect it</h2>
-              {listing.pickup_area && <p className="text-sm">{listing.pickup_area}</p>}
+              {listing.street_address && <p className="text-sm">{listing.street_address}</p>}
+              {listing.pickup_area && (
+                <p className="text-sm text-ink-muted">{listing.pickup_area}</p>
+              )}
               <a
                 href={
                   listing.lat !== null && listing.lng !== null

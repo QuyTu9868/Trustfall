@@ -44,8 +44,10 @@ export function PinPicker({
       const instance = L.map(container.current).setView(start, lat && lng ? 15 : 5);
       // CARTO rather than OpenStreetMap's own tile server. OSM's is meant for light,
       // occasional use and blocks traffic it does not recognise; CARTO's basemap tiles are
-      // free, need no key, and are meant to be embedded in exactly this kind of app.
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      // free, need no key, and are meant to be embedded in exactly this kind of app. Voyager
+      // over the plain grey style: it draws roads and labels, closer to what somebody
+      // expects a map to look like than a flat colour with a dot on it.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
         attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
         maxZoom: 19,
         subdomains: "abcd",

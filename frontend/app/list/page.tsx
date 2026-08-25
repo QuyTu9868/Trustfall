@@ -104,6 +104,7 @@ function ListFlow() {
               pickup_area: string | null;
               lat: number | null;
               lng: number | null;
+              street_address: string | null;
               price_per_day: string;
               deposit: string;
             }
@@ -119,6 +120,7 @@ function ListFlow() {
           pickupArea: found.pickup_area ?? "",
           lat: found.lat,
           lng: found.lng,
+          streetAddress: found.street_address ?? "",
           pricePerDay: String(Number(found.price_per_day)),
           deposit: String(Number(found.deposit)),
         });
@@ -271,6 +273,7 @@ function ListFlow() {
       body.set("lat", String(draft.lat));
       body.set("lng", String(draft.lng));
     }
+    body.set("streetAddress", draft.streetAddress.trim());
     body.set("pricePerDay", draft.pricePerDay);
     body.set("deposit", draft.deposit);
     files.forEach((file) => body.append("images", file));
@@ -375,8 +378,9 @@ function ListFlow() {
             />
           </Field>
 
-          {/* Ward, district and province, typed rather than street level, so a listing
-              never carries a house number in its title-and-photos preview. */}
+          {/* Ward, district and province. The map below and the address field after it
+              each add their own kind of detail; none of the three has to agree with the
+              others, the way a pin, a street name and a ward sometimes do not in real life. */}
           <Field
             label="Where it is collected"
             error={errors.pickupArea}
@@ -400,6 +404,19 @@ function ListFlow() {
                 set("lat", lat);
                 set("lng", lng);
               }}
+            />
+          </Field>
+
+          <Field
+            label="Street address"
+            error={errors.streetAddress}
+            hint="Optional. A building name, floor, or landmark the pin cannot say. Shown publicly."
+          >
+            <input
+              value={draft.streetAddress}
+              onChange={(e) => set("streetAddress", e.target.value)}
+              placeholder="e.g. 12 Nguyen Hue, 4th floor"
+              className="w-full rounded-control border border-line bg-surface px-3 py-2 text-sm"
             />
           </Field>
 

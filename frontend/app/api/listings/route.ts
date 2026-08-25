@@ -7,6 +7,7 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_IMAGE_BYTES,
   MAX_PICKUP_AREA_LENGTH,
+  MAX_STREET_ADDRESS_LENGTH,
   MAX_TITLE_LENGTH,
   type Category,
 } from "@/lib/listing";
@@ -55,6 +56,7 @@ async function createListing(request: Request) {
   const rawLng = form.get("lng");
   const lat = rawLat !== null && rawLat !== "" ? Number(rawLat) : null;
   const lng = rawLng !== null && rawLng !== "" ? Number(rawLng) : null;
+  const streetAddress = String(form.get("streetAddress") ?? "").trim();
   const pricePerDay = Number(form.get("pricePerDay"));
   const deposit = Number(form.get("deposit"));
   const images = form.getAll("images").filter((v): v is File => v instanceof File);
@@ -66,6 +68,7 @@ async function createListing(request: Request) {
     pickupArea,
     lat,
     lng,
+    streetAddress,
     pricePerDay,
     deposit,
     images,
@@ -92,6 +95,7 @@ async function createListing(request: Request) {
       pickup_area: pickupArea,
       lat,
       lng,
+      street_address: streetAddress || null,
       price_per_day: pricePerDay,
       deposit,
       status: "draft",
@@ -190,6 +194,7 @@ type Incoming = {
   pickupArea: string;
   lat: number | null;
   lng: number | null;
+  streetAddress: string;
   pricePerDay: number;
   deposit: number;
   images: File[];
@@ -230,6 +235,9 @@ export function firstTextProblem(input: Omit<Incoming, "images">): string | null
   }
   if (input.lng !== null && (!Number.isFinite(input.lng) || input.lng < -180 || input.lng > 180)) {
     return "That is not a real longitude.";
+  }
+  if (input.streetAddress.length > MAX_STREET_ADDRESS_LENGTH) {
+    return "That address is too long.";
   }
   if (!Number.isFinite(input.pricePerDay) || input.pricePerDay <= 0) {
     return "Daily price must be more than 0.";
