@@ -37,6 +37,8 @@ export type ListingDraft = {
   title: string;
   description: string;
   pickupArea: string;
+  lat: number | null;
+  lng: number | null;
   pricePerDay: string;
   deposit: string;
 };
@@ -46,6 +48,8 @@ export const emptyDraft: ListingDraft = {
   title: "",
   description: "",
   pickupArea: "",
+  lat: null,
+  lng: null,
   pricePerDay: "",
   deposit: "",
 };

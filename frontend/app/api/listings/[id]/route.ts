@@ -24,7 +24,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, owner_address, category, title, description, pickup_area, price_per_day, deposit, status, moderation_status, created_at, listing_images(url, sort_order, uploaded_at)"
+        "id, owner_address, category, title, description, pickup_area, lat, lng, price_per_day, deposit, status, moderation_status, created_at, listing_images(url, sort_order, uploaded_at)"
       )
       .eq("id", id)
       .single();
@@ -78,6 +78,10 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
     const title = String(form.get("title") ?? "").trim();
     const description = String(form.get("description") ?? "").trim();
     const pickupArea = String(form.get("pickupArea") ?? "").trim();
+    const rawLat = form.get("lat");
+    const rawLng = form.get("lng");
+    const lat = rawLat !== null && rawLat !== "" ? Number(rawLat) : null;
+    const lng = rawLng !== null && rawLng !== "" ? Number(rawLng) : null;
     const pricePerDay = Number(form.get("pricePerDay"));
     const deposit = Number(form.get("deposit"));
     const category = String(form.get("category") ?? "");
@@ -89,6 +93,8 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
       title,
       description,
       pickupArea,
+      lat,
+      lng,
       pricePerDay,
       deposit,
     });
@@ -103,6 +109,8 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
         title,
         description,
         pickup_area: pickupArea,
+        lat,
+        lng,
         price_per_day: pricePerDay,
         deposit,
         status: "draft",

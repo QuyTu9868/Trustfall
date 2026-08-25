@@ -51,6 +51,10 @@ async function createListing(request: Request) {
   const title = String(form.get("title") ?? "").trim();
   const description = String(form.get("description") ?? "").trim();
   const pickupArea = String(form.get("pickupArea") ?? "").trim();
+  const rawLat = form.get("lat");
+  const rawLng = form.get("lng");
+  const lat = rawLat !== null && rawLat !== "" ? Number(rawLat) : null;
+  const lng = rawLng !== null && rawLng !== "" ? Number(rawLng) : null;
   const pricePerDay = Number(form.get("pricePerDay"));
   const deposit = Number(form.get("deposit"));
   const images = form.getAll("images").filter((v): v is File => v instanceof File);
@@ -60,6 +64,8 @@ async function createListing(request: Request) {
     title,
     description,
     pickupArea,
+    lat,
+    lng,
     pricePerDay,
     deposit,
     images,
@@ -84,6 +90,8 @@ async function createListing(request: Request) {
       title,
       description,
       pickup_area: pickupArea,
+      lat,
+      lng,
       price_per_day: pricePerDay,
       deposit,
       status: "draft",
@@ -180,6 +188,8 @@ type Incoming = {
   title: string;
   description: string;
   pickupArea: string;
+  lat: number | null;
+  lng: number | null;
   pricePerDay: number;
   deposit: number;
   images: File[];
@@ -210,6 +220,16 @@ export function firstTextProblem(input: Omit<Incoming, "images">): string | null
   if (!input.pickupArea) return "Say roughly where it is collected from.";
   if (input.pickupArea.length > MAX_PICKUP_AREA_LENGTH) {
     return "That is too long for an area. A district or a neighbourhood is enough.";
+  }
+  // Both or neither. One without the other is a pin that cannot be placed on a map.
+  if ((input.lat === null) !== (input.lng === null)) {
+    return "That pin did not come through right. Click the map again.";
+  }
+  if (input.lat !== null && (!Number.isFinite(input.lat) || input.lat < -90 || input.lat > 90)) {
+    return "That is not a real latitude.";
+  }
+  if (input.lng !== null && (!Number.isFinite(input.lng) || input.lng < -180 || input.lng > 180)) {
+    return "That is not a real longitude.";
   }
   if (!Number.isFinite(input.pricePerDay) || input.pricePerDay <= 0) {
     return "Daily price must be more than 0.";

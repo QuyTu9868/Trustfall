@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     const { data, error } = await getSupabaseAdmin()
       .from("listings")
       .select(
-        "id, category, title, description, price_per_day, deposit, status, moderation_status, moderation_reason, created_at, listing_images(url, sort_order)"
+        "id, category, title, description, pickup_area, lat, lng, price_per_day, deposit, status, moderation_status, moderation_reason, created_at, listing_images(url, sort_order)"
       )
       .eq("owner_address", owner)
       .order("created_at", { ascending: false });
