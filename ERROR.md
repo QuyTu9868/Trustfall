@@ -1154,6 +1154,11 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
 - **Skill đích:** không có skill riêng cho việc viết commit message; thêm vào
   `code-change-workflow` một dòng nhắc kiểm lại tiêu đề trước khi commit khi gần đó có
   đọc `git log`.
+- **Cập nhật cùng ngày:** xảy ra **lần thứ ba** ngay trong phiên này, một commit khác lại
+  gõ đúng "Say where the arbitrator's proposal actually went" - cùng cụm câu đã bắt được ở
+  lần đầu, tưởng đã nhớ mà vẫn gõ lại y hệt. Xác nhận luật rút ra ở trên đúng theo kiểu tệ
+  nhất: tự kiểm không phải việc làm một lần rồi nhớ mãi, mà là bước phải lặp lại **mỗi
+  lần gõ tiêu đề**, không có ngoại lệ dù mới tự sửa xong lỗi y hệt vài phút trước.
 
 ---
 
