@@ -39,9 +39,13 @@ export function PinPicker({
 
       const start: [number, number] = [lat ?? 16.05, lng ?? 108.2];
       const instance = L.map(container.current).setView(start, lat && lng ? 15 : 5);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors",
+      // CARTO rather than OpenStreetMap's own tile server. OSM's is meant for light,
+      // occasional use and blocks traffic it does not recognise; CARTO's basemap tiles are
+      // free, need no key, and are meant to be embedded in exactly this kind of app.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
         maxZoom: 19,
+        subdomains: "abcd",
       }).addTo(instance);
 
       const place = (position: [number, number]) => {
