@@ -388,7 +388,17 @@ function ListFlow() {
           >
             <PickupArea
               value={draft.pickupArea}
-              onChange={(value) => set("pickupArea", value)}
+              onChange={(value) => {
+                // A pin placed for the old area is a pin in the wrong place now, and the
+                // directions link would keep pointing at it silently otherwise. Clearing
+                // it re-enables the auto-pan effect below, so the map moves to the new
+                // area instead of sitting on a pin that no longer matches what is on screen.
+                if (value !== draft.pickupArea) {
+                  set("lat", null);
+                  set("lng", null);
+                }
+                set("pickupArea", value);
+              }}
             />
           </Field>
 

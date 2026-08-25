@@ -91,8 +91,18 @@ export function PinPicker({
 
   // Moves the existing pin when lat/lng arrive after the map already exists, which is
   // exactly what happens loading a listing to edit: the map mounts before the fetch resolves.
+  //
+  // Removes it when they go back to null, which happens when the chosen area changes:
+  // without this the marker just sat wherever it last was, out of view after the map panned
+  // to the new area, and a click there would silently move that same stale marker rather
+  // than reveal that nothing was actually placed yet.
   useEffect(() => {
-    if (!map.current || lat === null || lng === null) return;
+    if (!map.current) return;
+    if (lat === null || lng === null) {
+      marker.current?.remove();
+      marker.current = null;
+      return;
+    }
     void import("leaflet").then((L) => {
       if (!map.current) return;
       const position: [number, number] = [lat, lng];
