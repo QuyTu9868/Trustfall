@@ -1133,6 +1133,28 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
   khởi động lại. Ở đây đúng là nguyên nhân, và mọi route hết 500 ngay sau đó.
 - **Skill đích:** `code-change-workflow`, `vibe-code-dapp`
 
+### [2026-08-25] Tái phạm ngay lập tức đúng lỗi vừa tự sửa: dán nhầm tiêu đề commit
+- **Chuyện gì xảy ra:** Viết commit message cho một fix về bản đồ, gõ tiêu đề "Say where
+  the arbitrator's proposal actually went" - câu này thực ra là tiêu đề một commit khác,
+  không liên quan, đã thấy trong `git log` vài lượt trước đó trong cùng phiên. Bắt được,
+  sửa bằng `git commit --amend`, gõ tiêu đề mới... **lại đúng kiểu đó**: "Land on the
+  rental you just made, and say why a revert happened" - tiêu đề của một commit khác nữa,
+  cũng lấy từ `git log` đã xem trước đó. Phải amend lần hai mới ra tiêu đề đúng.
+- **Sai ở đâu:** Cùng một lỗi được ghi vào mục "Errors and fixed" của tóm tắt phiên này
+  y hệt, mô tả là "self-correction" đã xử lý xong - nhưng chỉ xử lý đúng lần xảy ra đó,
+  không đổi cách viết commit message cho các lần sau. Khi `git log` đã hiện trong ngữ
+  cảnh gần đó (dù là để tra cứu việc khác), các dòng tiêu đề cũ trở thành mồi hoàn thành
+  câu quá mạnh, và viết "tiêu đề nghe đúng giọng dự án" bị nhầm với "nhớ lại một tiêu đề
+  đã đọc".
+- **Luật rút ra:** Sau khi gõ xong một tiêu đề commit, **tự hỏi "câu này tả đúng diff vừa
+  đổi không, hay tả đúng một commit khác mình vừa nhìn thấy"** trước khi chạy `git commit`,
+  đặc biệt nếu `git log` đã xuất hiện trong output gần đó cùng lượt. Bắt được một lần
+  không có nghĩa lần sau tự động đúng - đây là lỗi thuộc loại phải tự kiểm mỗi lần, không
+  phải loại sửa một lần là hết.
+- **Skill đích:** không có skill riêng cho việc viết commit message; thêm vào
+  `code-change-workflow` một dòng nhắc kiểm lại tiêu đề trước khi commit khi gần đó có
+  đọc `git log`.
+
 ---
 
 ## 4. Không ghi vào đây
