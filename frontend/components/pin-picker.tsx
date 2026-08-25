@@ -122,7 +122,7 @@ export function PinPicker({
   return (
     <div
       ref={container}
-      className="h-[28rem] w-full rounded-card border border-line"
+      className="mx-auto aspect-square h-[70vh] max-w-full rounded-card border border-line"
       aria-label="Click to drop a pin at the exact pickup spot"
     />
   );
