@@ -18,10 +18,13 @@ export function PinPicker({
   lat,
   lng,
   onChange,
+  centerHint,
 }: {
   lat: number | null;
   lng: number | null;
   onChange: (lat: number, lng: number) => void;
+  /** Where to point the map when nothing has been clicked yet. Never places a pin. */
+  centerHint?: { lat: number; lng: number } | null;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<import("leaflet").Map | null>(null);
@@ -105,6 +108,14 @@ export function PinPicker({
       map.current.setView(position, Math.max(map.current.getZoom(), 15));
     });
   }, [lat, lng]);
+
+  // Pans to the chosen area, but only while nothing has been clicked yet. Once there is a
+  // pin, picking a different ward should not silently drag it somewhere else: the owner
+  // clicked a specific spot, and only a new click of theirs should move it.
+  useEffect(() => {
+    if (!map.current || !centerHint || lat !== null || lng !== null) return;
+    map.current.setView([centerHint.lat, centerHint.lng], 13);
+  }, [centerHint, lat, lng]);
 
   return (
     <div

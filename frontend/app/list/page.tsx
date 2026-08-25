@@ -65,6 +65,24 @@ function ListFlow() {
   const [publishing, setPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
   const [moderation, setModeration] = useState<Moderation>({ state: "idle" });
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Points the map roughly at the chosen area. Never touches draft.lat/lng: that only ever
+  // changes from an actual click, so picking a different ward cannot silently move a pin
+  // the owner already placed.
+  useEffect(() => {
+    if (!draft.pickupArea) return;
+    let active = true;
+    void fetch(`/api/geocode?q=${encodeURIComponent(draft.pickupArea)}`)
+      .then((r) => r.json())
+      .then((found) => {
+        if (active && found) setMapCenter(found);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [draft.pickupArea]);
 
   // Photos stay as they are when editing. A rejection nearly always names something in
   // the words, and making somebody re-upload two files to fix a sentence is how they give
@@ -377,6 +395,7 @@ function ListFlow() {
             <PinPicker
               lat={draft.lat}
               lng={draft.lng}
+              centerHint={mapCenter}
               onChange={(lat, lng) => {
                 set("lat", lat);
                 set("lng", lng);
