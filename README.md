@@ -4,6 +4,9 @@ Rent real things from strangers, with the money held by a smart contract and the
 settled by an AI agent that cannot pay itself.
 
 Live demo: **https://trustfall-latch.vercel.app**
+[`/presentation`](https://trustfall-latch.vercel.app/presentation) walks through the design
+for a judge; [`/roadmap`](https://trustfall-latch.vercel.app/roadmap) says what is real today
+against what mainnet would still need.
 
 ## What it does
 
@@ -18,9 +21,16 @@ Live demo: **https://trustfall-latch.vercel.app**
   one of three words. It never sees an amount and never holds a key: the contract looks up
   the deposit it is already holding and does the arithmetic itself.
 - **A gateway in front of both agents.** Every command an agent issues leaves over HTTP so a
-  Latch policy can refuse it before the server signs anything.
+  Latch policy can refuse it before the server signs anything. /admin shows every proposal's
+  actual path: agent, then Latch, then the server, each step naming what it did.
+- **A person for the cases the agent cannot close.** Below the confidence bar nothing is
+  signed. An admin, gated by a live code from an authenticator app, can decide only those -
+  never a ruling the agent already signed.
 - **A log that can be checked.** /admin shows every ruling, what the agent read, and each
   finding beside the source it claims to come from.
+- **A pin, not just a neighbourhood.** An owner can drop an exact point on a map when
+  listing something, shown publicly alongside the ward-level area and an optional street
+  address - three independent ways to say where, none derived from the others.
 
 ## Screenshots
 
@@ -77,9 +87,11 @@ It returns findings before it returns a verdict. Each finding names the source i
 and it may only name a source it was actually given, so a finding citing a photograph on a
 dispute where none was filed is a hallucination the log catches by itself.
 
-Below 0.6 confidence nothing is signed at all. There is no human resolver: seven days after
-a dispute opens, anyone can finalise it and the deposit returns to the renter, which is the
-contract treating an unjudged dispute as the platform's failure rather than the renter's.
+Below 0.6 confidence nothing is signed at all. An admin can decide that ruling by hand,
+gated by a live authenticator code, and only that one - a verdict the agent already signed
+can never be overruled. Left alone instead, seven days after a dispute opens anyone can
+finalise it and the deposit returns to the renter, which is the contract treating an
+unjudged dispute as the platform's failure rather than the renter's.
 
 ## Tech stack
 
@@ -147,8 +159,8 @@ because Next.js cannot import modules from outside its own package.
 
 ## What this deliberately does not do
 
-No map or location filtering, no insurance, no identity verification, no deposit tiers, no
-multiple languages, no reward token. It is one flow, done properly, on a testnet.
+No location-based search or filtering, no insurance, no identity verification, no deposit
+tiers, no multiple languages, no reward token. It is one flow, done properly, on a testnet.
 
 Two limits worth saying out loud rather than waiting to be asked:
 
@@ -174,10 +186,10 @@ both leave them holding something. Awarding the whole deposit to the owner is th
 where being wrong costs somebody everything they put up, so the latch asks 0.9 for that
 verdict alone.
 
-It is not forbidden outright, which would read stronger and be worse. There is no human
-resolver, so a renter who genuinely wrecked the item would leave the agent blocked and the
-seven day timeout would hand them their deposit back. A gate that cannot be passed is not a
-policy, it is a deleted feature.
+It is not forbidden outright, which would read stronger and be worse. Below 0.9 an admin can
+still decide pay_owner by hand, so a renter who genuinely wrecked the item does not
+automatically walk away with the deposit just because the agent stopped short. A gate that
+cannot be passed by anyone is not a policy, it is a deleted feature.
 
 The policy is in [`services/latch/`](services/latch/), because a policy that exists only as
 boxes ticked on somebody else's dashboard is a policy nobody can review.

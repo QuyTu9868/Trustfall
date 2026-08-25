@@ -43,10 +43,11 @@ export type Finding = {
  * a machine could not tell is still a decision about somebody's money, made on the grounds
  * that nobody knew, which is worse than saying so and waiting.
  *
- * Waiting has a defined end. There is no human resolver behind this: the agent is the only
- * address the contract accepts. Seven days after a dispute opens, anyone can finalise it and
- * the deposit goes back to the renter, which is the contract calling an unjudged dispute the
- * platform's failure rather than the renter's.
+ * Waiting has a defined end, and it is not the only one any more. An admin can decide a
+ * held-back ruling by hand, still signed under this same address, since the contract only
+ * ever accepts one. Left to nobody, seven days after a dispute opens anyone can finalise it
+ * and the deposit goes back to the renter, which is the contract calling an unjudged dispute
+ * the platform's failure rather than the renter's.
  */
 export const MIN_CONFIDENCE = 0.6;
 
