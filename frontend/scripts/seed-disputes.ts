@@ -77,6 +77,14 @@ type Case = {
    */
   photo: "vehicles" | "homes" | "clothing" | `file:${string}`;
   /**
+   * Days from now to start the rental. Zero for every fresh listing, since nothing has
+   * ever booked it. A reused listing can have days already locked forever by an earlier
+   * run of this same script - the contract never frees a day once booked, deliberately
+   * left that way - so a case naming existingListing picks something comfortably clear of
+   * whatever an earlier attempt on the same listing might have taken.
+   */
+  startOffsetDays?: number;
+  /**
    * Where the argument starts.
    *
    * "active" opens the dispute straight after check-in, while the renter still has the
@@ -160,11 +168,14 @@ async function shot(spec: Shot) {
 
 const CASES: Case[] = [
   {
-    title: "Honda Wave 110, 2019",
+    // Reuses the listing already live on the marketplace rather than publishing a second
+    // Civic, per the user's own call: a scooter needs a real scooter photo, and a Civic
+    // is not one. Reusing what already exists and is real beats inventing a mismatch.
+    title: "Honda Civic Type R",
     category: "vehicle",
-    description: "Well kept scooter, new tyres last month. Helmet included.",
-    pricePerDay: "12",
-    deposit: "20",
+    description: "Boost Blue, manual, stock. Weekend hire only.",
+    pricePerDay: "100",
+    deposit: "500",
     ownerSays:
       "He gave it back late in the evening and I think there is a scratch on the side panel. I want the deposit.",
     renterSays:
@@ -177,35 +188,38 @@ const CASES: Case[] = [
     expect: "deposit back to the renter",
     // The owner claims a scratch and files a photograph of an unmarked panel. Both
     // photographs agree with the renter, which is the case worth being able to see.
-    photos: { owner: "clean", renter: "clean" },
+    photos: { owner: "file:Civic/civic_1.jpg", renter: "file:Civic/civic_1.jpg" },
     // Unmarked at both handovers, so the scratch the owner describes was never there.
-    handover: { checkin: "clean", checkout: "clean" },
-    photo: "vehicles",
+    handover: { checkin: "file:Civic/civic_1.jpg", checkout: "file:Civic/civic_1.jpg" },
+    photo: "file:Civic/civic_1.jpg",
     flow: "returned",
-    // Real entries from data/vn-places.json rather than invented ones, so the directions
-    // link resolves to somewhere that exists.
-    pickupArea: "Phường Phúc Xá, Quận Ba Đình, Thành phố Hà Nội",
+    existingListing: "Honda Civic Type R",
+    // A prior run of this exact case already locked the days right after "now" on this
+    // same listing, permanently - see the comment on startOffsetDays. Ninety days clears
+    // any run this script has ever done against it.
+    startOffsetDays: 90,
+    pickupArea: "Phường 13, Quận Bình Thạnh, Thành phố Hồ Chí Minh",
   },
   {
-    title: "Wool overcoat, size M",
+    title: "Black wool blazer, size 48",
     category: "clothing",
-    description: "Charcoal, mid length, dry cleaned before every hire.",
+    description: "Single button, notch lapel, white pocket square. Dry cleaned before every hire.",
     pricePerDay: "30",
     deposit: "40",
     ownerSays:
-      "There is a tear along the seam under the left arm. It was not there when I handed it over, I check every coat before it goes out.",
+      "There is a tear along the shoulder seam. It was not there when I handed it over, I check every jacket before it goes out.",
     renterSays:
-      "It caught on a chair at the reception and the seam opened. I am sorry. It is one seam and a tailor can close it.",
+      "It caught on something at the venue and the shoulder seam opened. I am sorry. It is one seam and a tailor can close it.",
     chat: [
-      { from: "renter", body: "Bad news, the coat caught on something tonight and the seam under the arm has opened." },
-      { from: "owner", body: "How big? That coat is lined, a seam there is not a five minute job." },
+      { from: "renter", body: "Bad news, the jacket caught on something tonight and the shoulder seam has opened." },
+      { from: "owner", body: "How big? That jacket is lined, a seam there is not a five minute job." },
       { from: "renter", body: "About ten centimetres. I will pay for the repair." },
     ],
     expect: "the owner keeps the deposit",
-    photos: { owner: "damaged", renter: "damaged" },
+    photos: { owner: "file:ao/ao_rachvai.png", renter: "file:ao/ao_rachvai.png" },
     // Clean going out and marked coming back, which is the pair doing its whole job.
-    handover: { checkin: "clean", checkout: "damaged" },
-    photo: "clothing",
+    handover: { checkin: "file:ao/vest.png", checkout: "file:ao/ao_rachvai.png" },
+    photo: "file:ao/vest.png",
     flow: "returned",
     pickupArea: "Phường Tân Định, Quận 1, Thành phố Hồ Chí Minh",
   },
@@ -227,8 +241,8 @@ const CASES: Case[] = [
     // Argued mid-rental, so there is a check-in photograph and nothing from a check-out
     // that has not happened. The gap is the point: the arbitrator has to say so rather
     // than invent the missing half.
-    handover: { checkin: "clean", checkout: "clean" },
-    photo: "homes",
+    handover: { checkin: "file:hotel/nha-01-a.jpg", checkout: "clean" },
+    photo: "file:hotel/nha-01-b.jpg",
     flow: "active",
     pickupArea: "Phường 14, Quận 3, Thành phố Hồ Chí Minh",
   },
@@ -262,34 +276,59 @@ const CASES: Case[] = [
     pickupArea: "Phường Thanh Bình, Quận Hải Châu, Thành phố Đà Nẵng",
   },
   {
-    title: "Riverside hotel room, Ha Tien",
-    category: "house",
-    description: "Twin room, river view, breakfast included.",
-    pricePerDay: "40",
-    deposit: "60",
+    // A second, separate blazer, built for the outcome the other two do not show: both
+    // sides have a real point. The renter flagged something before anyone could prove it
+    // either way, and the owner never answered while there was still time to check.
+    title: "Wool blazer, size 46",
+    category: "clothing",
+    description: "Single button, notch lapel, white pocket square. Dry cleaned before every hire.",
+    pricePerDay: "28",
+    deposit: "35",
+    ownerSays:
+      "There is an ink stain on the front panel. It was not marked at handover, so it must have happened during the rental.",
+    renterSays:
+      "I noticed a mark near the pocket when I picked it up and flagged it in the group chat straight away. Nobody replied. I did not cause it.",
+    chat: [
+      { from: "renter", body: "Quick one, is there already a small mark near the front pocket? Want to flag it before I leave." },
+      { from: "owner", body: "Sorry, just seeing this now. I do not remember one, but I was not looking closely at handover either." },
+    ],
+    expect: "both sides have a real point, split down the middle",
+    // Both file the same stain, because neither disputes it exists, only when it arrived.
+    // Check-in shows nothing because nobody photographed what the renter only typed about.
+    photos: { owner: "file:ao/ao_lemmuc.png", renter: "file:ao/ao_lemmuc.png" },
+    handover: { checkin: "file:ao/vest.png", checkout: "file:ao/ao_lemmuc.png" },
+    photo: "file:ao/vest_xeo.png",
+    flow: "returned",
+    pickupArea: "Phường 2, Thành phố Đà Lạt, Tỉnh Lâm Đồng",
+  },
+  {
     // Built for one purpose: a renter confessing to real damage, mid-rental, with nothing
     // resembling a check-out photograph anywhere in the record. If the guard in
     // app/api/agent/resolve-dispute/route.ts is not doing its job, this is the shape of
     // case that slips through it: a confident pay_owner with no photograph of the return
     // to support it, held up only by a chat log.
+    title: "Wool blazer, size 44",
+    category: "clothing",
+    description: "Single button, notch lapel, white pocket square. Dry cleaned before every hire.",
+    pricePerDay: "28",
+    deposit: "35",
     ownerSays:
-      "The renter admitted breaking the television while still in the room. I want the deposit to cover a replacement.",
+      "The renter admitted over chat that the sleeve tore while it is still in their possession. I want the deposit to cover the repair.",
     renterSays:
-      "I leaned back and knocked it with the remote. The corner of the screen went dark. I said I would pay for it and I still will.",
+      "I caught my arm getting into a car and heard a rip. I have not looked closely yet, I am still wearing it on the way home.",
     chat: [
-      { from: "renter", body: "Bad news, I knocked the TV with the remote and the screen has cracked." },
-      { from: "owner", body: "How bad is it? That is a new television." },
-      { from: "renter", body: "The whole corner of the screen is dark now. I am sorry, I will pay for it." },
+      { from: "renter", body: "Ah no, I think I just tore the sleeve getting into a car. I can feel it is loose." },
+      { from: "owner", body: "How bad? Can you check now?" },
+      { from: "renter", body: "I am still out, I will look properly when I am back. Sorry, I will cover it if it is torn." },
     ],
     expect: "pay_owner held back for having no check-out photograph, whatever the confidence",
     // Check-in only, because flow "active" never takes a check-out shot: the dispute is
-    // opened while the renter still has the room. Real photographs of a real room, so the
-    // arbitrator is reading the same walls the renter is describing rather than a drawn
-    // rectangle.
-    handover: { checkin: "file:hotel/nha-01-a.jpg", checkout: "clean" },
-    photo: "file:hotel/nha-01-b.jpg",
+    // opened while the renter still has the jacket. No photos filed either, matching the
+    // chat: the renter has not looked closely enough yet to photograph anything.
+    handover: { checkin: "file:ao/vest_xeo.png", checkout: "clean" },
+    photo: "file:ao/vest.png",
     flow: "active",
-    pickupArea: "Phường Tô Châu, Thành phố Hà Tiên, Tỉnh Kiên Giang",
+    pickupArea: "Phường Bến Nghé, Quận 1, Thành phố Hồ Chí Minh",
   },
 ];
 
@@ -338,8 +377,11 @@ async function main() {
 
   // One case at a time when a title is given, so a rerun does not spend a dozen real
   // transactions rebuilding rentals that already exist.
+  // Exact match, not includes: "Civic Type R" is a substring of "Honda Civic Type R" and a
+  // partial match here does not just pick the wrong case, it re-runs a listing that has
+  // already been booked and reverts on the day collision - discovered live, the hard way.
   const only = process.argv[2];
-  const chosen = only ? CASES.filter((c) => c.title.includes(only)) : CASES;
+  const chosen = only ? CASES.filter((c) => c.title === only) : CASES;
   if (!chosen.length) throw new Error(`No case matching "${only}".`);
 
   for (const item of chosen) {
@@ -427,6 +469,7 @@ async function main() {
     // try and surfaces as ERC20InsufficientAllowance, which sends you hunting for a missing
     // approval that was never the problem.
     const chainNow = Number((await pub.getBlock()).timestamp);
+    const start = chainNow + (item.startOffsetDays ?? 0) * 24 * 60 * 60;
     const total = price * 2n + deposit;
 
     // One signature for the money and one transaction for the request, same as the app.
@@ -474,8 +517,8 @@ async function main() {
           owner.address,
           price,
           deposit,
-          BigInt(chainNow),
-          BigInt(chainNow + 2 * 24 * 60 * 60),
+          BigInt(start),
+          BigInt(start + 2 * 24 * 60 * 60),
           permitDeadline,
           Number.parseInt(permit.slice(130, 132), 16),
           `0x${permit.slice(2, 66)}` as `0x${string}`,

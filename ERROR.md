@@ -1166,6 +1166,31 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
   cụ thể: khi commit tiếp trên một tính năng đã có tên, tiêu đề mới phải nói **phần vừa
   đổi thêm**, không lặp lại tiêu đề đã mô tả phần gốc.
 
+### [2026-08-27] Dựng lại đơn tranh chấp, đụng liền hai lỗi tự gây trong `seed-disputes.ts`
+- **Chuyện gì xảy ra:** Chạy lại case "Honda Civic Type R" (dùng lại listing có sẵn) lần
+  thứ hai trong cùng phiên, `approveRental` revert `DayNotAvailable` - ngày đã bị chính
+  lần chạy trước khoá vĩnh viễn trên contract (đúng giới hạn đã biết, đã chốt "kệ nó" từ
+  trước, giờ nó thật sự cản việc dựng lại demo). Sửa bằng cách thêm `startOffsetDays` để
+  ca nào dùng `existingListing` thì bắt đầu xa hơn (90 ngày), né mọi lần chạy cũ. Chạy
+  tiếp case "Civic Type R" bằng `npm run seed:disputes -- "Civic Type R"` thì script chạy
+  lại luôn cả "Honda Civic Type R" - vì filter dùng `title.includes(only)`, mà "Civic Type
+  R" là chuỗi con của "Honda Civic Type R", nên khớp luôn, tốn thêm một `DayNotAvailable`
+  revert nữa cho một rental không cần tạo (rental #30, kẹt ở trạng thái Requested vĩnh viễn,
+  vô hại vì USDC test mint tự do nhưng vẫn là rác để lại).
+- **Sai ở đâu:** Cả hai đều là loại lỗi "công cụ tự chế của mình, ẩn tới lúc mới chạm."
+  `startOffsetDays` là thiếu sót từ lúc thiết kế cơ chế `existingListing` - không tính
+  tới việc chạy lại một ca dùng listing có sẵn trong cùng phiên. Filter `includes` thay vì
+  so khớp chính xác là lỗi kinh điển "tên ngắn là chuỗi con của tên dài", y hệt lớp lỗi
+  từng gặp ở nơi khác trong dự án (so khớp chuỗi lỏng lẻo), chỉ là lần này nằm trong một
+  script nội bộ nên không ai để ý cho tới khi tự mình chạy hai case có tên lồng nhau.
+- **Luật rút ra:** Khi một script seed hỗ trợ chạy lại một ca đơn lẻ bằng tên, (1) nếu ca
+  đó tái sử dụng tài nguyên đã tồn tại (listing, tài khoản, id) thì phải tự né trạng thái
+  do lần chạy trước để lại, không giả định môi trường sạch; (2) filter theo tên phải so
+  khớp chính xác (`===`), không dùng `includes`/substring, trừ khi cố ý muốn khớp nhiều -
+  và nếu vậy phải nói rõ trong log đang chạy bao nhiêu ca để không âm thầm chạy nhầm.
+- **Skill đích:** `code-change-workflow` (mục cân độ test / kiểm trước khi tin script nội
+  bộ chạy đúng như tên tham số gợi ý)
+
 ---
 
 ## 4. Không ghi vào đây
