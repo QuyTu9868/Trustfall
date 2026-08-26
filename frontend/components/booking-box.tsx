@@ -93,6 +93,11 @@ export function BookingBox({
         )
       : undefined;
 
+  // Said the moment a start date lands on a taken day, rather than waiting for an end
+  // date to complete a range first. Picking the collection day and only then finding out
+  // it clashes is the same news arriving one field later than it has to.
+  const startTaken = start && taken.has(toUtcDay(start)) ? toUtcDay(start) : undefined;
+
   // What the booked range buys is an allowance, not a bill. The escrow holds this much,
   // and the final charge is worked out from the clock when the item comes back: a rental
   // day is 24 hours from check-in, and unused days are refunded.
@@ -104,7 +109,14 @@ export function BookingBox({
     authenticated &&
     user?.wallet?.address?.toLowerCase() === owner.toLowerCase();
   const canSubmit = Boolean(
-    start && end && days && days > 0 && !tooLong && !ownsIt && clash === undefined
+    start &&
+      end &&
+      days &&
+      days > 0 &&
+      !tooLong &&
+      !ownsIt &&
+      clash === undefined &&
+      startTaken === undefined
   );
 
   const label = !authenticated
@@ -178,6 +190,12 @@ export function BookingBox({
         </label>
       </div>
 
+      {startTaken !== undefined && (
+        <p className="text-xs text-stop-ink">
+          {dayLabel(startTaken)} is already booked. Pick a different collection date.
+        </p>
+      )}
+
       {invalidRange && (
         <p className="text-xs text-stop-ink">
           The return date has to be at least one day after the collection date.
@@ -188,7 +206,7 @@ export function BookingBox({
           {days} days. The contract caps a rental at {MAX_RENTAL_DAYS}.
         </p>
       )}
-      {clash !== undefined && (
+      {clash !== undefined && clash !== startTaken && (
         <p className="text-xs text-stop-ink">
           {dayLabel(clash)} is already booked. Pick dates that skip it.
         </p>
