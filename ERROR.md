@@ -1159,6 +1159,12 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
   lần đầu, tưởng đã nhớ mà vẫn gõ lại y hệt. Xác nhận luật rút ra ở trên đúng theo kiểu tệ
   nhất: tự kiểm không phải việc làm một lần rồi nhớ mãi, mà là bước phải lặp lại **mỗi
   lần gõ tiêu đề**, không có ngoại lệ dù mới tự sửa xong lỗi y hệt vài phút trước.
+- **Lần thứ tư, phiên sau nữa:** sửa `booking-box.tsx`, gõ nguyên văn tiêu đề của chính
+  commit gốc đã tạo ra tính năng đang sửa tiếp ("Say which days are taken, before the
+  wallet popup rather than after") - lần này không phải nhớ nhầm sang commit khác, mà là
+  tái dùng đúng tiêu đề của **commit tổ tiên** khi sửa tiếp cùng một tính năng. Thêm luật
+  cụ thể: khi commit tiếp trên một tính năng đã có tên, tiêu đề mới phải nói **phần vừa
+  đổi thêm**, không lặp lại tiêu đề đã mô tả phần gốc.
 
 ---
 
