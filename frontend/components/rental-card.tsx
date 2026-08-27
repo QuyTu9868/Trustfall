@@ -6,17 +6,15 @@ import { useEffect, useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount, useConfig } from "wagmi";
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
-import { ChatThread } from "@/components/chat-thread";
 import { DepositCountdown } from "@/components/deposit-countdown";
 import { DisputeBox } from "@/components/dispute-box";
 import { HandoverPhoto } from "@/components/handover-photo";
 import { ShowHandoverCode } from "@/components/handover-code";
 import { Photo } from "@/components/photo";
-import { ReviewBox } from "@/components/review-box";
+import { RentalSidebar } from "@/components/rental-sidebar";
 import { RoleTag } from "@/components/role-tag";
 import { ScanHandover } from "@/components/scan-handover";
 import { StatusStrip } from "@/components/status-strip";
-import { UnreadBadge } from "@/components/unread-badge";
 import { announce } from "@/lib/announce";
 import { targetChain } from "@/lib/chain";
 import { explainRevert } from "@/lib/contract-errors";
@@ -232,7 +230,11 @@ export function RentalCard({
         )}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+      {/* 1fr and 0.6fr, not 1fr and a fixed rem width. fr units split what is left in
+          proportion to each other, so the side column stays 60% as wide as the renting
+          column at every viewport, rather than a fixed width that is 60% of it only at
+          one particular screen size. */}
+      <div className="grid gap-4 lg:grid-cols-[1fr_0.6fr]">
         <div className="flex flex-col gap-4">
           <StatusStrip status={rental.status} />
 
@@ -385,27 +387,13 @@ export function RentalCard({
           )}
         </div>
 
-        <div className="flex flex-col gap-4">
-          {rental.status === "Completed" && (
-            <ReviewBox
-              rentalId={rental.id}
-              counterparty={isOwner ? rental.renter : rental.owner}
-              role={isOwner ? "owner" : "renter"}
-            />
-          )}
-
-          {/* Its own column now, sized like the rest of this side rather than a thin bar
-              squeezed under everything else at the foot of the card. It is where the two
-              sides settle where and when to actually meet, which makes it worth more room
-              than a toggle that had to be found and pressed first. */}
-          <section className="flex flex-col gap-3 rounded-card border border-line bg-canvas p-4">
-            <h3 className="flex items-center gap-2 text-sm">
-              Messages
-              <UnreadBadge count={unread.counts[rental.id.toString()] ?? 0} />
-            </h3>
-            <ChatThread rentalId={rental.id} />
-          </section>
-        </div>
+        <RentalSidebar
+          rentalId={rental.id}
+          status={rental.status}
+          counterparty={isOwner ? rental.renter : rental.owner}
+          role={isOwner ? "owner" : "renter"}
+          unreadCount={unread.counts[rental.id.toString()] ?? 0}
+        />
       </div>
 
       {openPanel === "show" && (
