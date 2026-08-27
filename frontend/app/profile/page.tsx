@@ -219,10 +219,7 @@ export default function ProfilePage() {
                     <Link href={`/rentals/${rental.id}`} className="text-xs text-ink-muted">
                       open
                     </Link>
-                    {/* The renter's own declutter button. Not offered on the lending side:
-                        an owner watching for a request to approve should not be able to
-                        make that row disappear by mistake. */}
-                    {!mine && !hiddenIds.has(id) && (
+                    {!hiddenIds.has(id) && (
                       <button
                         onClick={() => hideItem(id)}
                         className="text-xs text-ink-muted underline decoration-line underline-offset-4"
