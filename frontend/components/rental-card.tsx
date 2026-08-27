@@ -2,7 +2,7 @@
 
 import { useIdentityToken } from "@privy-io/react-auth";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount, useConfig } from "wagmi";
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
@@ -11,6 +11,7 @@ import { DepositCountdown } from "@/components/deposit-countdown";
 import { DisputeBox } from "@/components/dispute-box";
 import { HandoverPhoto } from "@/components/handover-photo";
 import { ShowHandoverCode } from "@/components/handover-code";
+import { Photo } from "@/components/photo";
 import { ReviewBox } from "@/components/review-box";
 import { RoleTag } from "@/components/role-tag";
 import { ScanHandover } from "@/components/scan-handover";
@@ -87,6 +88,29 @@ export function RentalCard({
   const me = address?.toLowerCase();
   const isOwner = me === rental.owner.toLowerCase();
   const isRenter = me === rental.renter.toLowerCase();
+
+  // What is actually being rented. The chain only ever carries the listing's id, so this
+  // is the one thing on the card that has to come from Supabase rather than an event log.
+  const listingId = bytes32ToListingId(rental.listingId);
+  const [listing, setListing] = useState<{
+    title: string;
+    listing_images: { url: string; sort_order: number }[];
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetch(`/api/listings/${listingId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (active && !data.error) setListing(data);
+      })
+      .catch(() => {
+        // The rest of the card still works without a title and photos.
+      });
+    return () => {
+      active = false;
+    };
+  }, [listingId]);
 
   const settled = rental.status === "Returned" || rental.status === "Completed";
   const settlement = useSettlement(rental.id, settled);
@@ -172,6 +196,41 @@ export function RentalCard({
             {money(rental.deposit)} USDC deposit{holdsDeposit ? ", held" : ""}
           </div>
         </div>
+      </div>
+
+      {/* What is being rented, and who the other side is. Neither one is on the chain by
+          name, only by id and address, so a rental page that only shows "#36" and a role
+          badge leaves both unanswerable without going elsewhere. */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {listing && (
+            <Link
+              href={`/listings/${listingId}`}
+              className="text-sm underline decoration-line underline-offset-4"
+            >
+              {listing.title}
+            </Link>
+          )}
+          <Link
+            href={`/profile/${(isOwner ? rental.renter : rental.owner).toLowerCase()}`}
+            className="text-xs text-ink-muted underline decoration-line underline-offset-4"
+          >
+            {isOwner ? "Renting to " : "Renting from "}
+            {(isOwner ? rental.renter : rental.owner).slice(0, 6)}...
+            {(isOwner ? rental.renter : rental.owner).slice(-4)}
+          </Link>
+        </div>
+
+        {listing && listing.listing_images.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+            {listing.listing_images
+              .slice()
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map((image) => (
+                <Photo key={image.url} src={image.url} alt={listing.title} />
+              ))}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
