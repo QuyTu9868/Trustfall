@@ -1191,6 +1191,49 @@ Loại thứ ba là loại đắt nhất vì nó chỉ lộ ra khi bấm thật,
 - **Skill đích:** `code-change-workflow` (mục cân độ test / kiểm trước khi tin script nội
   bộ chạy đúng như tên tham số gợi ý)
 
+### [2026-08-27] TaskStop không thật sự giết được script seed đang chạy trên Windows
+- **Chuyện gì xảy ra:** `seed-disputes.ts` treo lâu bất thường ở bước `resolveDispute`,
+  gọi TaskStop báo "Successfully stopped", rồi chạy script khác đè lên tưởng process cũ
+  đã chết. Vài phút sau dữ liệu on-chain vẫn đổi (rental #39 tự chuyển trạng thái) dù
+  không script nào của mình đang chạy - kiểm `wmic process` thì process gốc **vẫn sống**.
+- **Sai ở đâu:** Đúng lớp lỗi B2.3 đã ghi (`pkill` trên Windows không giết được gì), chỉ
+  khác lần này qua chính công cụ TaskStop của harness chứ không phải `pkill` gõ tay. Tin
+  vào thông báo "stopped" mà không kiểm bằng process list là nguyên nhân gốc.
+- **Luật rút ra:** Trên Windows, sau khi dừng bất kỳ tiến trình nền nào (kể cả qua
+  TaskStop), nếu định chạy song song thứ gì đó phụ thuộc vào việc nó đã chết thật, phải
+  `wmic process` kiểm lại trước, không tin thông báo "stopped" suông.
+- **Skill đích:** `code-change-workflow` (mục B2.3, thêm dòng: áp dụng cho cả TaskStop
+  của harness, không chỉ `pkill`)
+
+### [2026-08-27] `LATCH_API_KEY` nằm ở `.env.vercel`, và thứ tự `--env-file` đè nhầm RPC key
+- **Chuyện gì xảy ra:** Chạy `npm run seed:disputes` thiếu `LATCH_API_KEY` (script chỉ nạp
+  `.env.test` và `.env.local`). Tự thêm `--env-file=../.env.vercel` vào **sau cùng** để có
+  key đó, nhưng `.env.vercel` cũng có `SEPOLIA_RPC_URL` riêng (key Alchemy đã hết hạn mức
+  tháng), và nạp sau cùng nghĩa là nó đè mất key còn dùng được trong `.env.local` - script
+  chết vì RPC 429 "Monthly capacity limit exceeded".
+- **Sai ở đâu:** Không đọc kỹ ERROR.md đã ghi sẵn việc này trước khi gõ lệnh (mục ngày
+  trước đã nói rõ `.env.vercel` là nguồn của biến này), rồi khi tự vá thì không để ý
+  `--env-file` sau cùng thắng theo từng biến, không phải theo từng file.
+- **Luật rút ra:** Nạp nhiều `--env-file` thì file nào giữ biến "phải thắng" (ở đây là RPC
+  key còn hạn mức trong `.env.local`) phải xếp **cuối cùng**. Muốn mượn đúng một biến từ
+  file khác (`LATCH_API_KEY`) mà không muốn các biến khác của file đó ghi đè, xếp file đó
+  **đầu tiên**, không phải cuối.
+- **Skill đích:** `code-change-workflow` (mục PHẦN C, biến môi trường)
+
+### [2026-08-27] `GatewayUnreachable` không có nghĩa là đề nghị chưa tới nơi
+- **Chuyện gì xảy ra:** `resolveDispute` ném `GatewayUnreachable` cho case cuối. Định gọi
+  lại thì kiểm chain trước, thấy rental **đã Completed** và bảng `dispute_verdicts` đã có
+  verdict thật, ký thật - lỗi phía client (timeout đọc response) xảy ra sau khi phía server
+  đã ghi xong, không phải trước.
+- **Sai ở đâu:** Suýt gọi lại `resolveDispute` cho một rental đã xong, đúng kiểu lỗi mà
+  code-change-workflow đã cảnh báo ("đặt kỳ vọng bị chặn rồi lấy đó làm giấy phép dùng dữ
+  liệu thật") chỉ khác hướng: ở đây là ngờ vực "chưa chạy" thay vì ngờ vực "sẽ bị chặn".
+- **Luật rút ra:** Bất kỳ lỗi mạng nào ném ra sau bước đã gửi được request đi (không phải
+  lỗi validate trước khi gửi) đều phải kiểm trạng thái thật trước khi coi là thất bại và
+  thử lại - lỗi phía client không chứng minh được gì về việc phía server đã làm hay chưa.
+- **Skill đích:** `code-change-workflow` (mục A8, mở rộng: kiểm trạng thái trước khi coi
+  một lỗi mạng là "chưa xảy ra" và thử lại)
+
 ---
 
 ## 4. Không ghi vào đây
