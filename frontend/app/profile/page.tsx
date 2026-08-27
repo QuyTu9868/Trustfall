@@ -27,6 +27,10 @@ function money(value: bigint) {
   return Number(formatUnits(value, USDC_DECIMALS)).toFixed(2);
 }
 
+function hiddenRentalsKey(address: string) {
+  return `trustfall:hidden-rentals:${address.toLowerCase()}`;
+}
+
 /**
  * Everything about you in one place: what you are renting, what you are lending, what the
  * escrow is holding, and what other people have said about you.
@@ -46,6 +50,37 @@ export default function ProfilePage() {
   const unread = useUnread();
 
   const [reviews, setReviews] = useState<Review[] | null>(null);
+  // A profile that has been through a lot of testing accumulates rentals nobody wants to
+  // scroll past to find the recent ones. The chain keeps every one of them regardless;
+  // this only decides how many the page shows before asking.
+  const [showAllRentals, setShowAllRentals] = useState(false);
+  // A renter's own declutter list. Nothing about the rental changes: the chain still has
+  // it, the owner's side of the page still shows it. This is just which rows this one
+  // wallet, on this one browser, would rather not scroll past.
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [showHidden, setShowHidden] = useState(false);
+
+  useEffect(() => {
+    if (!address) return;
+    try {
+      const raw = localStorage.getItem(hiddenRentalsKey(address));
+      if (raw) setHiddenIds(new Set(JSON.parse(raw)));
+    } catch {
+      // Worst case the list looks a little longer than the renter left it.
+    }
+  }, [address]);
+
+  function hideRental(id: string) {
+    if (!address) return;
+    const next = new Set(hiddenIds);
+    next.add(id);
+    setHiddenIds(next);
+    try {
+      localStorage.setItem(hiddenRentalsKey(address), JSON.stringify([...next]));
+    } catch {
+      // Local-only convenience; a failed write just means it reappears next visit.
+    }
+  }
 
   useEffect(() => {
     if (!address) return;
@@ -93,6 +128,12 @@ export default function ProfilePage() {
     (rental) => rental.renter.toLowerCase() === me,
   );
   const lending = rentals.filter((rental) => rental.owner.toLowerCase() === me);
+  const visibleRentals = showHidden
+    ? rentals
+    : rentals.filter((rental) => !hiddenIds.has(rental.id.toString()));
+  const RENTALS_SHOWN = 8;
+  const shownRentals = showAllRentals ? visibleRentals : visibleRentals.slice(0, RENTALS_SHOWN);
+  const moreCount = visibleRentals.length - shownRentals.length;
   const average =
     reviews && reviews.length > 0
       ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
@@ -146,32 +187,61 @@ export default function ProfilePage() {
             code, a countdown, a settlement and a conversation in it, and four of those
             expanded at once buries the list they were meant to be part of. Its own address
             also means a notification can point straight at it. */}
-            {rentals.map((rental) => {
+            {shownRentals.map((rental) => {
               const mine = rental.owner.toLowerCase() === me;
+              const id = rental.id.toString();
               return (
-                <Link
-                  key={rental.id.toString()}
-                  href={`/rentals/${rental.id}`}
+                <div
+                  key={id}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3"
                 >
-                  <span className="flex items-center gap-3">
-                    <span className="tabular text-sm">
-                      Rental #{rental.id.toString()}
-                    </span>
+                  <Link href={`/rentals/${rental.id}`} className="flex items-center gap-3">
+                    <span className="tabular text-sm">Rental #{id}</span>
                     <span className="text-xs text-ink-muted">
                       {mine ? "you are lending" : "you are renting"}
                     </span>
-                    <UnreadBadge
-                      count={unread.counts[rental.id.toString()] ?? 0}
-                    />
-                  </span>
+                    <UnreadBadge count={unread.counts[id] ?? 0} />
+                  </Link>
                   <span className="flex items-center gap-3">
                     <StatusStrip status={rental.status} />
-                    <span className="text-xs text-ink-muted">open</span>
+                    <Link href={`/rentals/${rental.id}`} className="text-xs text-ink-muted">
+                      open
+                    </Link>
+                    {/* The renter's own declutter button. Not offered on the lending side:
+                        an owner watching for a request to approve should not be able to
+                        make that row disappear by mistake. */}
+                    {!mine && !hiddenIds.has(id) && (
+                      <button
+                        onClick={() => hideRental(id)}
+                        className="text-xs text-ink-muted underline decoration-line underline-offset-4"
+                      >
+                        Remove
+                      </button>
+                    )}
                   </span>
-                </Link>
+                </div>
               );
             })}
+
+            {visibleRentals.length > RENTALS_SHOWN && (
+              <button
+                onClick={() => setShowAllRentals((value) => !value)}
+                className="self-start text-xs text-ink-muted underline decoration-line underline-offset-4"
+              >
+                {showAllRentals ? "Show fewer" : `Show ${moreCount} more`}
+              </button>
+            )}
+
+            {hiddenIds.size > 0 && (
+              <button
+                onClick={() => setShowHidden((value) => !value)}
+                className="self-start text-xs text-ink-muted underline decoration-line underline-offset-4"
+              >
+                {showHidden
+                  ? "Hide the removed rentals again"
+                  : `${hiddenIds.size} removed. Show them`}
+              </button>
+            )}
           </section>
 
           <MyListings />
