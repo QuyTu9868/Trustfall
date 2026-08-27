@@ -64,6 +64,9 @@ export function HandoverPhoto({
       try {
         const response = await fetch(`/api/handover-photo?rentalId=${rentalId}`, {
           headers: identityToken ? { "privy-id-token": identityToken } : undefined,
+          // Evidence that decides a dispute has to be the current answer, never a browser's
+          // cached one keyed only by this URL and blind to which wallet asked.
+          cache: "no-store",
         });
         if (!response.ok || !active) return;
         const result = await response.json();

@@ -50,7 +50,9 @@ export function ReviewBox({
     let active = true;
 
     (async () => {
-      const response = await fetch(`/api/reviews?rentalId=${rentalId}`);
+      const response = await fetch(`/api/reviews?rentalId=${rentalId}`, {
+        cache: "no-store",
+      });
       if (!response.ok) return;
       const result = await response.json();
       if (active) setReviews(result.reviews as Review[]);

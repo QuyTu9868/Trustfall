@@ -88,7 +88,9 @@ export function DisputeBox({
 
     const load = async () => {
       try {
-        const response = await fetch(`/api/disputes?rentalId=${rentalId}`);
+        const response = await fetch(`/api/disputes?rentalId=${rentalId}`, {
+          cache: "no-store",
+        });
         if (!response.ok) return;
         const result = await response.json();
         if (!active) return;

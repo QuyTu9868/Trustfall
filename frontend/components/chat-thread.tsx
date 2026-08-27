@@ -54,7 +54,9 @@ export function ChatThread({ rentalId }: { rentalId: bigint }) {
 
     const load = async () => {
       try {
-        const response = await fetch(`/api/messages?rentalId=${rentalId}`);
+        const response = await fetch(`/api/messages?rentalId=${rentalId}`, {
+          cache: "no-store",
+        });
         const result = await response.json();
         if (!active) return;
         if (!response.ok) {
