@@ -84,7 +84,7 @@ export async function GET(request: Request) {
 
     let query = getSupabaseAdmin()
       .from("reviews")
-      .select("onchain_rental_id, reviewer_address, reviewee_address, rating, comment, created_at")
+      .select("id, onchain_rental_id, reviewer_address, reviewee_address, rating, comment, created_at")
       .order("created_at", { ascending: false });
 
     query = rentalId
@@ -96,6 +96,32 @@ export async function GET(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ reviews: data ?? [] });
   } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+/**
+ * A reviewee clears one review about them. Scoped to reviews about the caller and never
+ * to reviews the caller wrote about somebody else - deleting your own unflattering review
+ * of a counterparty is exactly the self-serving edit that reviews being public exists to
+ * prevent. This is a demo-account concession, not a production reputation feature.
+ */
+export async function DELETE(request: Request) {
+  try {
+    const caller = await walletFromIdentityToken(await readIdentityToken(request));
+    const id = new URL(request.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Which review?" }, { status: 400 });
+
+    const { error } = await getSupabaseAdmin()
+      .from("reviews")
+      .delete()
+      .eq("id", id)
+      .eq("reviewee_address", caller);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof AuthError) return errorResponse(error, 401);
     return errorResponse(error);
   }
 }

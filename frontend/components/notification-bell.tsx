@@ -1,6 +1,6 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
+import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
@@ -19,10 +19,6 @@ type Notification = {
 
 const POLL_MS = 15000;
 
-function dismissedNotificationsKey(address: string) {
-  return `trustfall:dismissed-notifications:${address.toLowerCase()}`;
-}
-
 /**
  * The bell, split into what happened and who is waiting for a reply.
  *
@@ -36,6 +32,7 @@ function dismissedNotificationsKey(address: string) {
  */
 export function NotificationBell() {
   const { authenticated } = usePrivy();
+  const { identityToken } = useIdentityToken();
   const { address } = useAccount();
   const unread = useUnread();
 
@@ -45,21 +42,6 @@ export function NotificationBell() {
   const [loaded, setLoaded] = useState<{ owner?: string; list: Notification[] }>({ list: [] });
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<"rentals" | "messages" | null>(null);
-  // A wallet used heavily for testing ends up with a bell full of old news nobody needs
-  // again. Dismissing is local and permanent: the row still exists in the database (an
-  // owner or an admin reading the same rental still sees the same history), it just stops
-  // showing up here.
-  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
-
-  useEffect(() => {
-    if (!address) return;
-    try {
-      const raw = localStorage.getItem(dismissedNotificationsKey(address));
-      if (raw) setDismissed(new Set(JSON.parse(raw)));
-    } catch {
-      // Worst case old notifications reappear once.
-    }
-  }, [address]);
 
   useEffect(() => {
     if (!authenticated || !address) return;
@@ -99,23 +81,20 @@ export function NotificationBell() {
 
   if (!authenticated) return null;
 
-  const items = (loaded.owner === address ? loaded.list : []).filter(
-    (item) => !dismissed.has(item.id),
-  );
+  const items = loaded.owner === address ? loaded.list : [];
   const unreadNotices = items.filter((item) => !item.is_read).length;
   const threads = Object.entries(unread.counts).filter(([, count]) => count > 0);
   const total = unreadNotices + unread.total;
 
-  function clearAll() {
-    if (!address || items.length === 0) return;
-    const next = new Set(dismissed);
-    for (const item of items) next.add(item.id);
-    setDismissed(next);
-    try {
-      localStorage.setItem(dismissedNotificationsKey(address), JSON.stringify([...next]));
-    } catch {
-      // Local-only convenience; a failed write just means it reappears next visit.
-    }
+  /** Empties this wallet's inbox for real. A heavily-tested account has no use for a
+   * year of old news, and nothing else in the app reads these once they are gone. */
+  async function clearAll() {
+    if (items.length === 0) return;
+    setLoaded((current) => ({ ...current, list: [] }));
+    await fetch("/api/notifications", {
+      method: "DELETE",
+      headers: identityToken ? { "privy-id-token": identityToken } : undefined,
+    });
   }
 
   async function toggle() {

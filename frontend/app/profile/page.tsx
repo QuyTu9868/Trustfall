@@ -1,6 +1,6 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
+import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatUnits } from "viem";
@@ -16,6 +16,7 @@ import { useMyRentals } from "@/lib/use-my-rentals";
 import { useUnread } from "@/lib/use-unread";
 
 type Review = {
+  id: string;
   onchain_rental_id: number;
   reviewer_address: string;
   rating: number;
@@ -44,6 +45,7 @@ function hiddenRentalsKey(address: string) {
  */
 export default function ProfilePage() {
   const { ready, authenticated, login } = usePrivy();
+  const { identityToken } = useIdentityToken();
   const { address } = useAccount();
   const { rentals, loading } = useMyRentals();
   const balances = useEscrowBalances(rentals);
@@ -70,6 +72,15 @@ export default function ProfilePage() {
       // Worst case the list looks a little longer than the renter left it.
     }
   }, [address]);
+
+  /** Deletes one review about you for real, not just off the screen. */
+  async function removeReview(id: string) {
+    setReviews((current) => (current ? current.filter((review) => review.id !== id) : current));
+    await fetch(`/api/reviews?id=${id}`, {
+      method: "DELETE",
+      headers: identityToken ? { "privy-id-token": identityToken } : undefined,
+    });
+  }
 
   function hideItem(id: string) {
     if (!address) return;
@@ -268,35 +279,28 @@ export default function ProfilePage() {
             </p>
           )}
 
-          {reviews
-            ?.filter(
-              (review) => !hiddenIds.has(`review-${review.onchain_rental_id}-${review.reviewer_address}`),
-            )
-            .map((review) => {
-              const reviewKey = `review-${review.onchain_rental_id}-${review.reviewer_address}`;
-              return (
-                <article
-                  key={reviewKey}
-                  className="flex flex-col gap-1.5 rounded-card border border-line bg-surface p-4"
+          {reviews?.map((review) => (
+            <article
+              key={review.id}
+              className="flex flex-col gap-1.5 rounded-card border border-line bg-surface p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <Stars value={review.rating} />
+                <button
+                  onClick={() => removeReview(review.id)}
+                  className="text-xs text-ink-muted underline decoration-line underline-offset-4"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <Stars value={review.rating} />
-                    <button
-                      onClick={() => hideItem(reviewKey)}
-                      className="text-xs text-ink-muted underline decoration-line underline-offset-4"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <span className="tabular text-[11px] text-ink-muted">
-                    Rental #{review.onchain_rental_id} ·{" "}
-                    {review.reviewer_address.slice(0, 6)}...
-                    {review.reviewer_address.slice(-4)}
-                  </span>
-                  {review.comment && <p className="text-sm">{review.comment}</p>}
-                </article>
-              );
-            })}
+                  Remove
+                </button>
+              </div>
+              <span className="tabular text-[11px] text-ink-muted">
+                Rental #{review.onchain_rental_id} ·{" "}
+                {review.reviewer_address.slice(0, 6)}...
+                {review.reviewer_address.slice(-4)}
+              </span>
+              {review.comment && <p className="text-sm">{review.comment}</p>}
+            </article>
+          ))}
         </section>
       </div>
     </main>

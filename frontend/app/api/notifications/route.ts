@@ -96,6 +96,24 @@ export async function GET(request: Request) {
   }
 }
 
+/** Empties this wallet's own inbox for good. Nobody else's notifications are touched. */
+export async function DELETE(request: Request) {
+  try {
+    const caller = await walletFromIdentityToken(await readIdentityToken(request));
+
+    const { error } = await getSupabaseAdmin()
+      .from("notifications")
+      .delete()
+      .eq("recipient_address", caller);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof AuthError) return errorResponse(error, 401);
+    return errorResponse(error);
+  }
+}
+
 /** Marks everything in this wallet's inbox as read. */
 export async function PATCH(request: Request) {
   try {
