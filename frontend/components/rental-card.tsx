@@ -81,7 +81,6 @@ export function RentalCard({
     at: Status;
   } | null>(null);
   const openPanel = panel?.at === rental.status ? panel.kind : null;
-  const [chatOpen, setChatOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -352,17 +351,6 @@ export function RentalCard({
               </Action>
             )}
 
-            <Secondary onClick={() => setChatOpen((open) => !open)}>
-              <span className="flex items-center gap-1.5">
-                {chatOpen ? "Hide messages" : "Messages"}
-                {!chatOpen && (
-                  <UnreadBadge
-                    count={unread.counts[rental.id.toString()] ?? 0}
-                  />
-                )}
-              </span>
-            </Secondary>
-
             {/* Only while the money is still there to argue over. The contract refuses
                 from any other status, and a button that always reverts is worse than no
                 button. Either side can press it: the owner claiming damage and the renter
@@ -397,13 +385,27 @@ export function RentalCard({
           )}
         </div>
 
-        {rental.status === "Completed" && (
-          <ReviewBox
-            rentalId={rental.id}
-            counterparty={isOwner ? rental.renter : rental.owner}
-            role={isOwner ? "owner" : "renter"}
-          />
-        )}
+        <div className="flex flex-col gap-4">
+          {rental.status === "Completed" && (
+            <ReviewBox
+              rentalId={rental.id}
+              counterparty={isOwner ? rental.renter : rental.owner}
+              role={isOwner ? "owner" : "renter"}
+            />
+          )}
+
+          {/* Its own column now, sized like the rest of this side rather than a thin bar
+              squeezed under everything else at the foot of the card. It is where the two
+              sides settle where and when to actually meet, which makes it worth more room
+              than a toggle that had to be found and pressed first. */}
+          <section className="flex flex-col gap-3 rounded-card border border-line bg-canvas p-4">
+            <h3 className="flex items-center gap-2 text-sm">
+              Messages
+              <UnreadBadge count={unread.counts[rental.id.toString()] ?? 0} />
+            </h3>
+            <ChatThread rentalId={rental.id} />
+          </section>
+        </div>
       </div>
 
       {openPanel === "show" && (
@@ -444,8 +446,6 @@ export function RentalCard({
       {(rental.status === "Disputed" || rental.disputedAt > 0n) && (
         <DisputeBox rentalId={rental.id} owner={rental.owner} renter={rental.renter} />
       )}
-
-      {chatOpen && <ChatThread rentalId={rental.id} />}
 
       {error && <p className="text-xs text-stop-ink">{error}</p>}
     </article>
