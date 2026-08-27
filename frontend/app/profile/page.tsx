@@ -8,6 +8,7 @@ import { useAccount } from "wagmi";
 import { Earnings } from "@/components/earnings";
 import { MyListings } from "@/components/my-listings";
 import { StatusStrip } from "@/components/status-strip";
+import { Stars } from "@/components/stars";
 import { UnreadBadge } from "@/components/unread-badge";
 import { USDC_DECIMALS } from "@/lib/escrow";
 import { useEscrowBalances } from "@/lib/use-escrow-balances";
@@ -231,20 +232,5 @@ function Stat({
       <span className="tabular text-xl">{value}</span>
       {note && <span className="text-[11px] text-ink-muted">{note}</span>}
     </div>
-  );
-}
-
-function Stars({ value }: { value: number }) {
-  return (
-    <span className="flex gap-0.5" aria-label={`${value} out of 5`}>
-      {[1, 2, 3, 4, 5].map((star) => (
-        <span
-          key={star}
-          className={star <= value ? "text-ink-strong" : "text-line"}
-        >
-          ★
-        </span>
-      ))}
-    </span>
   );
 }

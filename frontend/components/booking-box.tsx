@@ -12,6 +12,7 @@ import {
 } from "@/lib/escrow";
 import { dayLabel, toRanges, useBookedDays } from "@/lib/use-booked-days";
 import { useRequestRental } from "@/lib/use-request-rental";
+import { ReviewSummary } from "./review-summary";
 
 const MAX_RENTAL_DAYS = 30; // mirrors RentalEscrow.MAX_RENTAL_DAYS
 const FEE_BPS = 100; // mirrors RentalEscrow.FEE_BPS, 1%
@@ -278,6 +279,8 @@ export function BookingBox({
         One signature approves the USDC and sends the request together. The owner has to
         accept before anything is charged, and you can cancel until they do.
       </p>
+
+      <ReviewSummary address={owner} />
     </aside>
   );
 }
