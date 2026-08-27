@@ -167,11 +167,14 @@ async function shot(spec: Shot) {
 }
 
 const CASES: Case[] = [
+  // Three cases, three outcomes: a clean renter win, a clean owner win, and a genuine
+  // split. Earlier rounds of this file covered refund_renter and pay_owner several times
+  // over but never actually landed split - the one attempt at it was built to be
+  // ambiguous and the live model still called it for the renter. This set narrows to one
+  // case per theme in image_test and puts the real design effort into the hotel case
+  // actually earning a split rather than hoping for one.
   {
-    // Reuses the listing already live on the marketplace rather than publishing a second
-    // Civic, per the user's own call: a scooter needs a real scooter photo, and a Civic
-    // is not one. Reusing what already exists and is real beats inventing a mismatch.
-    title: "Honda Civic Type R",
+    title: "Civic Type R",
     category: "vehicle",
     description: "Boost Blue, manual, stock. Weekend hire only.",
     pricePerDay: "100",
@@ -193,19 +196,14 @@ const CASES: Case[] = [
     handover: { checkin: "file:Civic/civic_1.jpg", checkout: "file:Civic/civic_1.jpg" },
     photo: "file:Civic/civic_1.jpg",
     flow: "returned",
-    existingListing: "Honda Civic Type R",
-    // A prior run of this exact case already locked the days right after "now" on this
-    // same listing, permanently - see the comment on startOffsetDays. Ninety days clears
-    // any run this script has ever done against it.
-    startOffsetDays: 90,
-    pickupArea: "Phường 13, Quận Bình Thạnh, Thành phố Hồ Chí Minh",
+    pickupArea: "Phường Thanh Bình, Quận Hải Châu, Thành phố Đà Nẵng",
   },
   {
-    title: "Black wool blazer, size 48",
+    title: "Wool blazer, size 46",
     category: "clothing",
     description: "Single button, notch lapel, white pocket square. Dry cleaned before every hire.",
-    pricePerDay: "30",
-    deposit: "40",
+    pricePerDay: "28",
+    deposit: "35",
     ownerSays:
       "There is a tear along the shoulder seam. It was not there when I handed it over, I check every jacket before it goes out.",
     renterSays:
@@ -221,114 +219,42 @@ const CASES: Case[] = [
     handover: { checkin: "file:ao/vest.png", checkout: "file:ao/ao_rachvai.png" },
     photo: "file:ao/vest.png",
     flow: "returned",
-    pickupArea: "Phường Tân Định, Quận 1, Thành phố Hồ Chí Minh",
+    pickupArea: "Phường Bến Nghé, Quận 1, Thành phố Hồ Chí Minh",
   },
   {
-    title: "Studio apartment near Ben Thanh",
+    // The one built for split, deliberately. The renter is forthcoming about the one
+    // thing they actually did and files evidence of it themselves; the owner's other two
+    // claims have nothing behind them but the owner's own word and no admission to match.
+    // Real photographs of an actual bed sheet, an actual wall, an actual television, so
+    // the arbitrator is reading damage rather than a drawn panel standing in for it.
+    title: "Twin hotel room, Da Lat",
     category: "house",
-    description: "35 square metres, air conditioning, washing machine, wifi.",
-    pricePerDay: "25",
-    deposit: "30",
+    description: "Two single beds, en-suite bathroom, mountain view. Central location, walk to the lake.",
+    pricePerDay: "35",
+    deposit: "50",
     ownerSays:
-      "He is complaining about the air conditioning to get money back. It was serviced in June and it works.",
+      "There is a coffee stain on the sheet, a scratch on the wall by the bed, and the TV screen is cracked. All three were fine when they checked in. I want the deposit to cover the sheet, the wall repair and a new screen.",
     renterSays:
-      "The air conditioning has not worked since I arrived. It is 34 degrees. I have messaged twice and had no answer.",
+      "I spilled coffee on the sheet the first night, that one is on me and I already said I would pay for the cleaning. I never touched the wall, and the TV was already cracked when we turned it on that evening, we just did not think to photograph it before using it.",
     chat: [
-      { from: "renter", body: "Hi, the aircon in the bedroom is blowing warm air. Can someone look at it?" },
-      { from: "renter", body: "Still nothing today, it is really hot. Please can you send someone." },
+      { from: "renter", body: "Hey, quick heads up, I spilled coffee on the sheet this morning. Sorry, happy to cover the cleaning." },
+      { from: "owner", body: "Thanks for saying, that is fine, accidents happen." },
+      { from: "renter", body: "Also just noticed the TV screen has a crack, think it was already like that when we turned it on last night, not sure if you knew." },
+      { from: "owner", body: "First I am hearing about it. And what about the mark on the wall by the bed?" },
+      { from: "renter", body: "What mark? Nobody has touched the wall." },
     ],
-    expect: "argued while still renting, with no check-out photograph to weigh",
-    // Argued mid-rental, so there is a check-in photograph and nothing from a check-out
-    // that has not happened. The gap is the point: the arbitrator has to say so rather
-    // than invent the missing half.
-    handover: { checkin: "file:hotel/nha-01-a.jpg", checkout: "clean" },
+    expect: "split: one damage admitted and evidenced, two claimed with no matching admission or proof of timing",
+    // The renter's own photo is the stain they already admitted to; the owner's own photo
+    // is the wall, which the renter denies and nobody else corroborates. Filing different
+    // things rather than disagreeing about the same one is the point.
+    photos: { owner: "file:hotel/hotel_sofarach.png", renter: "file:hotel/hotel_gasban.png" },
+    // Clean at check-in, and the cracked screen is what greets the owner at check-out -
+    // the one piece of damage that shows up in both the filed evidence and the handover
+    // pair, which is exactly why it is the one neither side is really arguing about.
+    handover: { checkin: "file:hotel/nha-01-a.jpg", checkout: "file:hotel/hotel_tivihong.png" },
     photo: "file:hotel/nha-01-b.jpg",
-    flow: "active",
-    pickupArea: "Phường 14, Quận 3, Thành phố Hồ Chí Minh",
-  },
-  {
-    title: "Civic Type R",
-    category: "vehicle",
-    description: "Boost Blue, manual, stock. Weekend hire only.",
-    pricePerDay: "100",
-    deposit: "500",
-    // Used to reuse the listing the user had published by hand through the app. That row
-    // was removed by a full off-chain wipe, so there is nothing left to reuse and this now
-    // publishes its own copy, the same as every other case here.
-    ownerSays:
-      "The nearside headlight is smashed through to the housing. It was intact when he took it, and the photograph I took at handover shows that.",
-    renterSays:
-      "Something flicked up off the road on the way back. There is a scuff on the bumper, that is all I saw. I did not notice anything wrong with the light.",
-    chat: [
-      { from: "owner", body: "Back safely? Anything I should know about." },
-      { from: "renter", body: "All good, picked up a small scuff on the front bumper, sorry about that." },
-      { from: "owner", body: "That is not a scuff. The headlight is in pieces. Have you looked at it." },
-    ],
-    expect: "the photographs disagree about how bad it is, not about whether it happened",
-    // Real photographs, and the case is built on the gap between them. The owner files a
-    // headlight broken through to the housing; the renter files the light scuff they
-    // admitted to. Both are of the same blue car, so neither can be dismissed as a picture
-    // of something else, and the arbitrator has to weigh severity rather than identity.
-    photos: { owner: "file:Civic/be_den_hau.png", renter: "file:Civic/tray_can.png" },
-    handover: { checkin: "file:Civic/civic_1.jpg", checkout: "file:Civic/be_den_hau.png" },
-    photo: "file:Civic/civic_1.jpg",
-    flow: "returned",
-    pickupArea: "Phường Thanh Bình, Quận Hải Châu, Thành phố Đà Nẵng",
-  },
-  {
-    // A second, separate blazer, built for the outcome the other two do not show: both
-    // sides have a real point. The renter flagged something before anyone could prove it
-    // either way, and the owner never answered while there was still time to check.
-    title: "Wool blazer, size 46",
-    category: "clothing",
-    description: "Single button, notch lapel, white pocket square. Dry cleaned before every hire.",
-    pricePerDay: "28",
-    deposit: "35",
-    ownerSays:
-      "There is an ink stain on the front panel. It was not marked at handover, so it must have happened during the rental.",
-    renterSays:
-      "I noticed a mark near the pocket when I picked it up and flagged it in the group chat straight away. Nobody replied. I did not cause it.",
-    chat: [
-      { from: "renter", body: "Quick one, is there already a small mark near the front pocket? Want to flag it before I leave." },
-      { from: "owner", body: "Sorry, just seeing this now. I do not remember one, but I was not looking closely at handover either." },
-    ],
-    expect: "both sides have a real point, split down the middle",
-    // Both file the same stain, because neither disputes it exists, only when it arrived.
-    // Check-in shows nothing because nobody photographed what the renter only typed about.
-    photos: { owner: "file:ao/ao_lemmuc.png", renter: "file:ao/ao_lemmuc.png" },
-    handover: { checkin: "file:ao/vest.png", checkout: "file:ao/ao_lemmuc.png" },
-    photo: "file:ao/vest_xeo.png",
     flow: "returned",
     pickupArea: "Phường 2, Thành phố Đà Lạt, Tỉnh Lâm Đồng",
-  },
-  {
-    // Built for one purpose: a renter confessing to real damage, mid-rental, with nothing
-    // resembling a check-out photograph anywhere in the record. If the guard in
-    // app/api/agent/resolve-dispute/route.ts is not doing its job, this is the shape of
-    // case that slips through it: a confident pay_owner with no photograph of the return
-    // to support it, held up only by a chat log.
-    title: "Wool blazer, size 44",
-    category: "clothing",
-    description: "Single button, notch lapel, white pocket square. Dry cleaned before every hire.",
-    pricePerDay: "28",
-    deposit: "35",
-    ownerSays:
-      "The renter admitted over chat that the sleeve tore while it is still in their possession. I want the deposit to cover the repair.",
-    renterSays:
-      "I caught my arm getting into a car and heard a rip. I have not looked closely yet, I am still wearing it on the way home.",
-    chat: [
-      { from: "renter", body: "Ah no, I think I just tore the sleeve getting into a car. I can feel it is loose." },
-      { from: "owner", body: "How bad? Can you check now?" },
-      { from: "renter", body: "I am still out, I will look properly when I am back. Sorry, I will cover it if it is torn." },
-    ],
-    expect: "pay_owner held back for having no check-out photograph, whatever the confidence",
-    // Check-in only, because flow "active" never takes a check-out shot: the dispute is
-    // opened while the renter still has the jacket. No photos filed either, matching the
-    // chat: the renter has not looked closely enough yet to photograph anything.
-    handover: { checkin: "file:ao/vest_xeo.png", checkout: "clean" },
-    photo: "file:ao/vest.png",
-    flow: "active",
-    pickupArea: "Phường Bến Nghé, Quận 1, Thành phố Hồ Chí Minh",
   },
 ];
 
