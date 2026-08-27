@@ -222,35 +222,37 @@ const CASES: Case[] = [
     pickupArea: "Phường Bến Nghé, Quận 1, Thành phố Hồ Chí Minh",
   },
   {
-    // The one built for split, deliberately. The renter is forthcoming about the one
-    // thing they actually did and files evidence of it themselves; the owner's other two
-    // claims have nothing behind them but the owner's own word and no admission to match.
-    // Real photographs of an actual bed sheet, an actual wall, an actual television, so
-    // the arbitrator is reading damage rather than a drawn panel standing in for it.
+    // Second attempt at split, on a different axis. The first tried to make severity
+    // ambiguous and lost to a photograph that settled it anyway - a photograph is exactly
+    // the kind of thing the arbitrator is told to trust over an assertion, so severity was
+    // never going to stay ambiguous once one existed. This one leaves the damage itself
+    // undisputed by both sides and photographed the same way by both, and puts the
+    // disagreement somewhere no photograph can resolve it: a third party, the owner's own
+    // cleaner, had the room to herself while neither party was there to see what happened.
     title: "Twin hotel room, Da Lat",
     category: "house",
     description: "Two single beds, en-suite bathroom, mountain view. Central location, walk to the lake.",
     pricePerDay: "35",
     deposit: "50",
     ownerSays:
-      "There is a coffee stain on the sheet, a scratch on the wall by the bed, and the TV screen is cracked. All three were fine when they checked in. I want the deposit to cover the sheet, the wall repair and a new screen.",
+      "The wall by the bed is scratched and the TV screen is cracked. Neither mark was there at check-in, and they had the only key for the whole stay. I want the deposit for the wall repair and a new screen.",
     renterSays:
-      "I spilled coffee on the sheet the first night, that one is on me and I already said I would pay for the cleaning. I never touched the wall, and the TV was already cracked when we turned it on that evening, we just did not think to photograph it before using it.",
+      "Your cleaner let herself in on the second afternoon while we were out, you told us at check-in that might happen. We came back to a tidied room and did not look closely at the wall or the TV that day. Neither of us touched either of them.",
     chat: [
-      { from: "renter", body: "Hey, quick heads up, I spilled coffee on the sheet this morning. Sorry, happy to cover the cleaning." },
-      { from: "owner", body: "Thanks for saying, that is fine, accidents happen." },
-      { from: "renter", body: "Also just noticed the TV screen has a crack, think it was already like that when we turned it on last night, not sure if you knew." },
-      { from: "owner", body: "First I am hearing about it. And what about the mark on the wall by the bed?" },
-      { from: "renter", body: "What mark? Nobody has touched the wall." },
+      { from: "renter", body: "Heading out to the lake for a few hours, is your cleaner still coming by like you mentioned at check-in?" },
+      { from: "owner", body: "Yes, she will pop in around 2 to freshen the towels, will not take long." },
+      { from: "renter", body: "The wall by the bed is scratched and the TV screen has a crack? Neither of us touched either of those, are you sure it was not already there." },
+      { from: "owner", body: "It was fine when you checked in. And she has cleaned that room a hundred times without anything like this happening." },
+      { from: "renter", body: "I am not saying it was her on purpose, just that she was in there alone and we were not." },
     ],
-    expect: "split: one damage admitted and evidenced, two claimed with no matching admission or proof of timing",
-    // The renter's own photo is the stain they already admitted to; the owner's own photo
-    // is the wall, which the renter denies and nobody else corroborates. Filing different
-    // things rather than disagreeing about the same one is the point.
-    photos: { owner: "file:hotel/hotel_sofarach.png", renter: "file:hotel/hotel_gasban.png" },
-    // Clean at check-in, and the cracked screen is what greets the owner at check-out -
-    // the one piece of damage that shows up in both the filed evidence and the handover
-    // pair, which is exactly why it is the one neither side is really arguing about.
+    expect: "split: the damage itself is not in dispute, but a third party with unsupervised access makes it unprovable which side answers for it",
+    // Neither side denies either mark exists - both file the same photograph of it, which
+    // is the point. The argument was never about what happened to the room, only about who
+    // was in it when nobody else was watching.
+    photos: { owner: "file:hotel/hotel_sofarach.png", renter: "file:hotel/hotel_sofarach.png" },
+    // Clean at check-in; the crack is what the pair actually shows at check-out, real and
+    // undisputed. The wall is argued from the same filed photograph rather than from a
+    // second handover shot, since only one photograph is taken per handover.
     handover: { checkin: "file:hotel/nha-01-a.jpg", checkout: "file:hotel/hotel_tivihong.png" },
     photo: "file:hotel/nha-01-b.jpg",
     flow: "returned",
