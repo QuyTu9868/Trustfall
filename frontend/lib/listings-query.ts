@@ -99,6 +99,25 @@ export async function fetchListing(id: string): Promise<ListingDetail | null> {
   } as ListingDetail;
 }
 
+/** One address's public listings, for a profile page a stranger might be reading. */
+export async function fetchListingsByOwner(owner: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("listings")
+    .select("id, category, title, price_per_day, deposit, listing_images(url, sort_order)")
+    .eq("owner_address", owner)
+    .eq("status", "published")
+    .eq("moderation_status", "approved")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    ...row,
+    listing_images: [...row.listing_images].sort((a, b) => a.sort_order - b.sort_order),
+  })) as ListingCard[];
+}
+
 /** Counts per category, for the filter row to show how much is behind each button. */
 export async function fetchCategoryCounts() {
   const supabase = getSupabase();

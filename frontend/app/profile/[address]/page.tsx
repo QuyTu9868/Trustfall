@@ -1,6 +1,9 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { useAccount } from "wagmi";
+import { MyListings } from "@/components/my-listings";
+import { OwnerListings } from "@/components/owner-listings";
 import { Stars } from "@/components/stars";
 
 type Review = {
@@ -24,6 +27,8 @@ export default function PublicProfilePage({
   params: Promise<{ address: string }>;
 }) {
   const { address } = use(params);
+  const { address: myAddress } = useAccount();
+  const isMe = myAddress?.toLowerCase() === address.toLowerCase();
   const [reviews, setReviews] = useState<Review[] | null>(null);
 
   useEffect(() => {
@@ -81,6 +86,18 @@ export default function PublicProfilePage({
           </article>
         ))}
       </section>
+
+      {/* Your own address gets the full page: pending and rejected listings included, with
+          edit and delete. A stranger's address only ever gets what everyone else can
+          already see, laid out as the same square cards the browse grid uses. */}
+      {isMe ? (
+        <MyListings />
+      ) : (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-xl">Listed by this address</h2>
+          <OwnerListings address={address} />
+        </section>
+      )}
     </main>
   );
 }
