@@ -54,9 +54,10 @@ export default function ProfilePage() {
   // scroll past to find the recent ones. The chain keeps every one of them regardless;
   // this only decides how many the page shows before asking.
   const [showAllRentals, setShowAllRentals] = useState(false);
-  // A renter's own declutter list. Nothing about the rental changes: the chain still has
-  // it, the owner's side of the page still shows it. This is just which rows this one
-  // wallet, on this one browser, would rather not scroll past.
+  // A declutter list shared by every row on this page that can be dismissed: a rental in
+  // "Your rentals", an old earning in "What lending has paid". Nothing about the
+  // underlying record changes anywhere else; this is only which ids this one wallet, on
+  // this one browser, would rather not see again.
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
 
@@ -70,7 +71,7 @@ export default function ProfilePage() {
     }
   }, [address]);
 
-  function hideRental(id: string) {
+  function hideItem(id: string) {
     if (!address) return;
     const next = new Set(hiddenIds);
     next.add(id);
@@ -166,7 +167,7 @@ export default function ProfilePage() {
           {/* Above the rental list, because somebody who lends things opens this page to
               find out how it is going, and below the four tiles, because those are the
               wider picture this one narrows. Renders nothing at all for a pure renter. */}
-          <Earnings figures={balances.earnings} />
+          <Earnings figures={balances.earnings} hiddenIds={hiddenIds} onHide={hideItem} />
 
           <section className="flex flex-col gap-4">
             <div className="flex items-baseline gap-3">
@@ -212,7 +213,7 @@ export default function ProfilePage() {
                         make that row disappear by mistake. */}
                     {!mine && !hiddenIds.has(id) && (
                       <button
-                        onClick={() => hideRental(id)}
+                        onClick={() => hideItem(id)}
                         className="text-xs text-ink-muted underline decoration-line underline-offset-4"
                       >
                         Remove
@@ -267,20 +268,35 @@ export default function ProfilePage() {
             </p>
           )}
 
-          {reviews?.map((review) => (
-            <article
-              key={`${review.onchain_rental_id}-${review.reviewer_address}`}
-              className="flex flex-col gap-1.5 rounded-card border border-line bg-surface p-4"
-            >
-              <Stars value={review.rating} />
-              <span className="tabular text-[11px] text-ink-muted">
-                Rental #{review.onchain_rental_id} ·{" "}
-                {review.reviewer_address.slice(0, 6)}...
-                {review.reviewer_address.slice(-4)}
-              </span>
-              {review.comment && <p className="text-sm">{review.comment}</p>}
-            </article>
-          ))}
+          {reviews
+            ?.filter(
+              (review) => !hiddenIds.has(`review-${review.onchain_rental_id}-${review.reviewer_address}`),
+            )
+            .map((review) => {
+              const reviewKey = `review-${review.onchain_rental_id}-${review.reviewer_address}`;
+              return (
+                <article
+                  key={reviewKey}
+                  className="flex flex-col gap-1.5 rounded-card border border-line bg-surface p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <Stars value={review.rating} />
+                    <button
+                      onClick={() => hideItem(reviewKey)}
+                      className="text-xs text-ink-muted underline decoration-line underline-offset-4"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <span className="tabular text-[11px] text-ink-muted">
+                    Rental #{review.onchain_rental_id} ·{" "}
+                    {review.reviewer_address.slice(0, 6)}...
+                    {review.reviewer_address.slice(-4)}
+                  </span>
+                  {review.comment && <p className="text-sm">{review.comment}</p>}
+                </article>
+              );
+            })}
         </section>
       </div>
     </main>

@@ -26,10 +26,20 @@ function money(value: bigint) {
  * Hidden entirely for somebody who has never lent anything. An earnings panel reading zero
  * on a renter's profile is a report about a business they are not in.
  */
-export function Earnings({ figures }: { figures: Figures }) {
+export function Earnings({
+  figures,
+  hiddenIds,
+  onHide,
+}: {
+  figures: Figures;
+  hiddenIds: Set<string>;
+  onHide: (id: string) => void;
+}) {
   const [titles, setTitles] = useState<Titles>({});
 
-  const items = [...figures.perListing.entries()].sort((a, b) => (b[1] > a[1] ? 1 : -1));
+  const items = [...figures.perListing.entries()]
+    .filter(([listingId]) => !hiddenIds.has(bytes32ToListingId(listingId)))
+    .sort((a, b) => (b[1] > a[1] ? 1 : -1));
 
   useEffect(() => {
     if (items.length === 0) return;
@@ -103,6 +113,7 @@ export function Earnings({ figures }: { figures: Figures }) {
               <tr>
                 <th className="px-4 py-3 font-normal">Item</th>
                 <th className="px-4 py-3 text-right font-normal">Earned</th>
+                <th className="px-4 py-3 font-normal" aria-hidden />
               </tr>
             </thead>
             <tbody>
@@ -112,13 +123,21 @@ export function Earnings({ figures }: { figures: Figures }) {
                   <tr key={listingId} className="border-b border-line last:border-0">
                     <td className="px-4 py-3">
                       {/* The uuid when the title is not to hand: a deleted listing still
-                          earned what it earned, and dropping the row would make the total
-                          above stop adding up. */}
+                          earned what it earned, and the figures above still count it even
+                          once the row itself is dismissed. */}
                       {titles[uuid] ?? (
                         <span className="tabular text-xs text-ink-muted">{uuid}</span>
                       )}
                     </td>
                     <td className="tabular px-4 py-3 text-right">{money(amount)} USDC</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => onHide(uuid)}
+                        className="text-xs text-ink-muted underline decoration-line underline-offset-4"
+                      >
+                        Remove
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

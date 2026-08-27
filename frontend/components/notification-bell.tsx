@@ -19,6 +19,10 @@ type Notification = {
 
 const POLL_MS = 15000;
 
+function dismissedNotificationsKey(address: string) {
+  return `trustfall:dismissed-notifications:${address.toLowerCase()}`;
+}
+
 /**
  * The bell, split into what happened and who is waiting for a reply.
  *
@@ -41,6 +45,21 @@ export function NotificationBell() {
   const [loaded, setLoaded] = useState<{ owner?: string; list: Notification[] }>({ list: [] });
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<"rentals" | "messages" | null>(null);
+  // A wallet used heavily for testing ends up with a bell full of old news nobody needs
+  // again. Dismissing is local and permanent: the row still exists in the database (an
+  // owner or an admin reading the same rental still sees the same history), it just stops
+  // showing up here.
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!address) return;
+    try {
+      const raw = localStorage.getItem(dismissedNotificationsKey(address));
+      if (raw) setDismissed(new Set(JSON.parse(raw)));
+    } catch {
+      // Worst case old notifications reappear once.
+    }
+  }, [address]);
 
   useEffect(() => {
     if (!authenticated || !address) return;
@@ -80,10 +99,24 @@ export function NotificationBell() {
 
   if (!authenticated) return null;
 
-  const items = loaded.owner === address ? loaded.list : [];
+  const items = (loaded.owner === address ? loaded.list : []).filter(
+    (item) => !dismissed.has(item.id),
+  );
   const unreadNotices = items.filter((item) => !item.is_read).length;
   const threads = Object.entries(unread.counts).filter(([, count]) => count > 0);
   const total = unreadNotices + unread.total;
+
+  function clearAll() {
+    if (!address || items.length === 0) return;
+    const next = new Set(dismissed);
+    for (const item of items) next.add(item.id);
+    setDismissed(next);
+    try {
+      localStorage.setItem(dismissedNotificationsKey(address), JSON.stringify([...next]));
+    } catch {
+      // Local-only convenience; a failed write just means it reappears next visit.
+    }
+  }
 
   async function toggle() {
     const nowOpen = !open;
@@ -135,28 +168,36 @@ export function NotificationBell() {
               {items.length === 0 ? (
                 <p className="px-3 pb-3 text-xs text-ink-muted">Nothing yet.</p>
               ) : (
-                items.map((item) => (
-                  <Link
-                    key={item.id}
-                    // News about a listing belongs on the listings page, not the rentals
-                    // one. A notification that opens somewhere unrelated is a notification
-                    // people stop opening.
-                    href={
-                      item.listing_id
-                        ? "/profile"
-                        : item.onchain_rental_id
-                          ? `/rentals/${item.onchain_rental_id}`
-                          : "/profile"
-                    }
-                    onClick={() => setOpen(false)}
-                    className="flex flex-col gap-1 border-t border-line p-3 text-sm"
+                <>
+                  {items.map((item) => (
+                    <Link
+                      key={item.id}
+                      // News about a listing belongs on the listings page, not the rentals
+                      // one. A notification that opens somewhere unrelated is a notification
+                      // people stop opening.
+                      href={
+                        item.listing_id
+                          ? "/profile"
+                          : item.onchain_rental_id
+                            ? `/rentals/${item.onchain_rental_id}`
+                            : "/profile"
+                      }
+                      onClick={() => setOpen(false)}
+                      className="flex flex-col gap-1 border-t border-line p-3 text-sm"
+                    >
+                      <span>{item.body}</span>
+                      <span className="text-[11px] text-ink-muted">
+                        {new Date(item.created_at).toLocaleString()}
+                      </span>
+                    </Link>
+                  ))}
+                  <button
+                    onClick={clearAll}
+                    className="border-t border-line p-3 text-left text-xs text-ink-muted underline decoration-line underline-offset-4"
                   >
-                    <span>{item.body}</span>
-                    <span className="text-[11px] text-ink-muted">
-                      {new Date(item.created_at).toLocaleString()}
-                    </span>
-                  </Link>
-                ))
+                    Clear all
+                  </button>
+                </>
               )}
             </Section>
 
