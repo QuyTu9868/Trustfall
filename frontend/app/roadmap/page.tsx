@@ -86,17 +86,9 @@ const NOW = [
     title: "Two-way reviews",
     body: "The renter rates the owner and the owner rates the renter, and neither can be written until the rental is finished and the money has moved.",
   },
-  {
-    title: "Deployed and verified on Sepolia",
-    body: "Real transactions against a real contract, address and source both public and checkable on Etherscan.",
-  },
 ];
 
 const MAINNET = [
-  {
-    title: "The contract rewritten in Rust",
-    body: "Rialo has not opened a public testnet yet, so this runs on Sepolia in Solidity today. When Rialo does, the escrow logic moves to Rust, since Rialo is not EVM.",
-  },
   {
     title: "More than one person behind the admin override",
     body: "Right now a single admin, gated by a one-time code, can decide the rulings the agent left unsigned. A real product needs more than one person able to do that, and a record of who.",
