@@ -95,8 +95,8 @@ export default function PresentationPage() {
               be almost certain.&rdquo;
             </blockquote>
             <p className="text-sm text-ink-muted">
-              In numbers: every verdict needs 0.6 confidence to be signed at all. Awarding the
-              full deposit to the owner needs 0.9. That difference is written once, in Rust, in
+              In numbers: every verdict needs 60% confidence to be signed at all. Awarding the
+              full deposit to the owner needs 90%. That difference is written once, in Rust, in
               the one place the agent cannot edit it, and it never lowers a bar or names an
               amount, it only ever narrows what the agent is allowed to be sure about.
             </p>
@@ -295,7 +295,7 @@ const RENTAL_STEPS = [
 const VERDICTS = [
   { name: "Back to the renter", body: "The item came back as agreed." },
   { name: "Split down the middle", body: "Both sides are partly right." },
-  { name: "The owner keeps it", body: "The item was damaged or lost. Needs 0.9 confidence." },
+  { name: "The owner keeps it", body: "The item was damaged or lost. Needs 90% confidence." },
 ];
 
 const STACK = [

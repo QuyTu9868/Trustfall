@@ -356,7 +356,7 @@ export function DisputeBox({
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm">{OUTCOME[ruling.verdict]}</span>
             <span className="tabular text-xs text-ink-muted">
-              confidence {ruling.confidence.toFixed(2)}
+              confidence {Math.round(ruling.confidence * 100)}%
             </span>
           </div>
           <p className="text-sm text-ink-muted">{ruling.reason}</p>

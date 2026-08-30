@@ -147,7 +147,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
         <p className="text-ink-muted">{verdict.reason}</p>
 
         <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-          <Row label="Confidence" value={verdict.confidence.toFixed(2)} tabular />
+          <Row label="Confidence" value={`${Math.round(verdict.confidence * 100)}%`} tabular />
           <Row label="Model" value={verdict.model} />
           <Row label="Decided" value={new Date(verdict.created_at).toLocaleString()} />
           <Row label="Read" value={verdict.evidence_seen} />
@@ -164,7 +164,7 @@ export default function AdminDisputePage({ params }: { params: Promise<{ id: str
             <li className="flex items-baseline justify-between gap-4">
               <span>1. Agent proposes {OUTCOME[verdict.verdict]}, over HTTP</span>
               <span className="tabular text-xs text-ink-muted">
-                confidence {verdict.confidence.toFixed(2)}
+                confidence {Math.round(verdict.confidence * 100)}%
               </span>
             </li>
             <li className="flex flex-col gap-1">

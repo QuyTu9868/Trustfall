@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       heldBack =
         "Nobody photographed the item coming back, so there is no evidence of the condition it was returned in. A ruling that the renter damaged it cannot rest on that, whatever the arbitrator's confidence. Somebody has to decide this one.";
     } else if (confidence < MIN_CONFIDENCE) {
-      heldBack = `Confidence ${confidence.toFixed(2)} is below ${MIN_CONFIDENCE}, so nothing was signed.`;
+      heldBack = `Confidence ${Math.round(confidence * 100)}% is below ${Math.round(MIN_CONFIDENCE * 100)}%, so nothing was signed.`;
     } else {
       try {
         txHash = await signVerdict(rentalId, body.verdict as (typeof VERDICTS)[number] & never);

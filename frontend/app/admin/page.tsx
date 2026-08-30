@@ -226,7 +226,7 @@ export default function AdminPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3">{OUTCOME[entry.verdict]}</td>
-                  <td className="tabular px-4 py-3">{entry.confidence.toFixed(2)}</td>
+                  <td className="tabular px-4 py-3">{Math.round(entry.confidence * 100)}%</td>
                   <td className="px-4 py-3">
                     {/* Every proposal here leaves the app over HTTP and passes a Latch
                         policy before the server will act on it. This is the one place that
